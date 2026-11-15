@@ -1,0 +1,182 @@
+{
+  "prototypeNotice": "PROTOTYPE - NOT FOR PRODUCTION",
+  "licence": {"id": "UNKNOWN", "note": "Authorized local prototype transfer only. User supply does not establish public distribution rights; original rights holder not verified."},
+  "ships": false,
+  "usage": "Local prototype assets only; not approved for public export, publication or redistribution.",
+  "sourceRoot": "prototypes/oathbound",
+  "sourceProvenance": "prototypes/oathbound/assets/provenance.yaml",
+  "originalPathBase": "Original user-supplied asset collection (relative paths only; no private absolute locations retained).",
+  "transfer": "Byte-for-byte copies of exactly 22 explicit roster PNG files. No image transformation during transfer; original import transformations below are inherited from source provenance.",
+  "manifest": "src/game/oathboundSprites.json",
+  "metadataSources": ["prototypes/oathbound/config.js", "prototypes/oathbound/index.html", "prototypes/oathbound/roster-system.js", "prototypes/oathbound/team-sprites.js", "prototypes/oathbound/expanded-sprites.js", "prototypes/oathbound/assets/notes.md"],
+  "metadataNotes": {
+    "names": "Base five use the exact playable roster names from index.html; expanded entries use exact expanded-sprites.js names. Provenance retains playable roster spellings separately where different.",
+    "facing": {"defaultDirection": "right", "flipWhenFacing": "left", "perHeroFlipExceptions": {}, "basis": "index.html passes u.facing<0 to all sprite draw paths; drawLancerSprite, drawBelindaSprite and team-sprite-renderer.js mirror the horizontal scale only when flip is true. No per-hero direction/flip metadata or importer mirroring was found.", "limitation": "Right-facing is the source renderer convention for all 22 heroes, not an independently visually verified claim about every image or frame. Static-reference portraits have no authored movement direction."},
+    "geometry": "width/height are full PNG dimensions. cellWidth is 181 for Estrilda, 256 for every other hero. Clip groundY is relative to each clip rectangle, not the full PNG.",
+    "scale": "Estrilda and Belinda use their config.js SpriteScale values. Team atlases use teamSpriteScale. Expanded entries preserve source metadata.scale verbatim; those values describe the importer body scale already applied to the packed PNG and are not a mandate to rescale runtime rendering again.",
+    "fps": "Generic defaults: idle 8, run 12, attack/hit 15, death 12, skills 12. Estrilda and Belinda retain all per-clip FPS overrides from config.js. The source generic renderer uses teamActionFPS for skill playback; this package intentionally uses the requested generic skill default of 12 rather than asserting exact renderer timing fidelity.",
+    "aliases": "Source aliases and all original named clips, including skill4 where supplied, are retained. Added run aliases reuse idle geometry where no confirmed run row exists; generic skill reuses the source renderer's fallback preference skillAura, then skill1, then attack. Added aliases are metadata only, not new authored animation or mechanics.",
+    "limitations": "Static-reference Cecilia and Eluard, Oscar idle-action fallback, Morrow/Palmer shared cast rows, excluded VFX-only cells and clipped effect margins remain limitations. No skills are implemented by this package.",
+    "hashes": "source.sha256 hashes the local PNG copied from the source prototype; original.sha256 is the recorded hash of the pre-import user-supplied image. Original external files were not read. Estrilda is recorded as an unchanged source copy; its original hash is the copied PNG hash."
+  },
+  "assets": [
+    {
+      "path": "public/assets/oathbound/mounted-lancer.png", "sourceId": "lancer", "unitId": 4, "name": "Estrilda", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/mounted-lancer.png", "sha256": "f1c72682b604a1db175b6c35d5f37e805f797a9878650dd84443817a39f7d971", "width": 1086, "height": 1448},
+      "original": {"path": "Heros/Estrilda/Mounted Lancer Animation Sprite Sheet.png", "sha256": "f1c72682b604a1db175b6c35d5f37e805f797a9878650dd84443817a39f7d971", "hashBasis": "Unchanged source copy per assets/notes.md; original external file not independently read.", "product": "Estrilda / Mounted Lancer Animation Sprite Sheet"},
+      "transformation": "None: original supplied PNG retained unchanged. Six 181px columns, irregular packed animation rows; full cell rectangles retained so weapon effects are not trimmed.",
+      "limitation": "Animation mapping inferred from poses, no authored source metadata. No running row confirmed. Skill rows are visual variants and do not establish independent shield/heal mechanics. Public distribution rights unverified.", "sourceDate": "2026-11-11"
+    },
+    {
+      "path": "public/assets/oathbound/lucius-atlas.png", "sourceId": "warden", "unitId": 44, "name": "Lucius", "sourceSpriteName": "lucius", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/lucius-atlas.png", "sha256": "bdabeae977d0341b1599b7fa5b4bf022525a21db31ef4d3cbb93e3a171d93c28", "width": 3072, "height": 1792},
+      "original": {"path": "Heros/5.Lucius/preview_atlas_white_bgLucius.png", "sha256": "c222557332955f8e58bd99ad9b3f581cece3aa8bfef2ab9f0530fce11416b7bc"},
+      "transformation": "Same importer; inferred7rows incl run/shield/blessing. White armor protected where enclosed; matte approximate.",
+      "importer": "prototypes/oathbound/tools/import-team.cjs", "transformationContext": "Edge-connected near-white removal, measured body anchors/nonuniform crops, detached crop-edge pruning; 256px cells anchored at x128/ground220.",
+      "limitation": "Inferred seven rows, not an authored animation manifest; white-armor matte approximate. Generic skill aliases skillAura.", "sourceDate": "2026-11-12"
+    },
+    {
+      "path": "public/assets/oathbound/raine-atlas.png", "sourceId": "ranger", "unitId": 34, "name": "Raine", "sourceSpriteName": "raine", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/raine-atlas.png", "sha256": "954f3d21a614de4a86876a353c27ba2ffbdef327ecd1eb158f0dc3878de53621", "width": 3072, "height": 1536},
+      "original": {"path": "Heros/3.Raine/preview_atlas_white_bg_3.Raine.png", "sha256": "37fb386643b0f0fe47cf482877c33090886266cb9307fc02d8588784e5a254d3"},
+      "transformation": "Edge-connected near-white removal, measured body anchors/nonuniform crops, detached crop-edge pruning; tools/import-team.cjs. Inferred6rows, repeated skill poses where no dedicated row supplied.",
+      "importer": "prototypes/oathbound/tools/import-team.cjs",
+      "limitation": "Inferred six rows; repeated skill poses where no dedicated row supplied. No confirmed running row; run explicitly aliases idle.", "sourceDate": "2026-11-12"
+    },
+    {
+      "path": "public/assets/oathbound/belinda-mage.png", "sourceId": "mage", "unitId": 20, "name": "Belinda", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/belinda-mage.png", "sha256": "000d18597e0854c14430ed4f96645e554b96af4002f99af31aacb8e1ae4802ec", "width": 2048, "height": 2048},
+      "original": {"path": "Heros/2.Belinda/Belinda’s Radiant Mage Sprite Atlas.png", "sha256": "f04c5898c63d0703b2b6d80db3774beb9645a3db8e3db1093261ff97efad05d8", "product": "Belinda’s Radiant Mage Sprite Atlas"},
+      "transformation": "Edge-connected near-white removal; measured nonuniform crops packed in 256px cells. See tools/import-belinda.cjs.",
+      "importer": "prototypes/oathbound/tools/import-belinda.cjs",
+      "limitation": "Row layout inferred from supplied image, not an official authored animation manifest. Detached crop-edge fragments pruned. No confirmed running row; run explicitly aliases idle.", "sourceDate": "2026-11-12"
+    },
+    {
+      "path": "public/assets/oathbound/fawkes-atlas.png", "sourceId": "healer", "unitId": 37, "name": "Fawkes", "sourceSpriteName": "fawkes", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/fawkes-atlas.png", "sha256": "d0600083d1b0400937cff20338777051061aba7543394bbb6c838e3d49fc5f6b", "width": 3072, "height": 2048},
+      "original": {"path": "Heros/4.Fawkes/preview_atlas_white_bg4Fawkes.png", "sha256": "86f62bcce284338a1b4413e7117e99c971fc502cf6dd56955e9e4165e70dc35b"},
+      "transformation": "Same importer; inferred8rows incl run/coffin/spirit poses; overlapping detached effects are approximate.",
+      "importer": "prototypes/oathbound/tools/import-team.cjs", "transformationContext": "Edge-connected near-white removal, measured body anchors/nonuniform crops, detached crop-edge pruning; 256px cells anchored at x128/ground220.",
+      "limitation": "Inferred eight rows; overlapping detached effects approximate. Generic skill aliases skillAura.", "sourceDate": "2026-11-12"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-thane.png", "sourceId": "thane", "unitId": 45, "name": "Thane", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-thane.png", "sha256": "47b1caa7a6f122697374142d65330fc36d2373ba4ab909b4bbef0d34aa1ad164", "width": 3072, "height": 2048},
+      "original": {"path": "Heros/6.Thane/Thane’s Fantasy Combat Sprite Atlas.png", "sha256": "c638c18c48cecd0dca382af8661c4d53a30a951893e2d58107eeb1a3583fe979", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: low-alpha noise cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Gray canvas already has alpha. Characterless dash and faded death tail excluded. Oversize effect margins clipped. Numbered aliases: skill1=skillDash, skill2=skillSwords, skill3=skillArc; inferred labels, not an authored skill manifest.",
+      "limitation": "Gray RGB canvas already has alpha; low-alpha noise removed. Faded/effect-only dash and death-tail cells excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-hendrik.png", "sourceId": "hendrik", "unitId": 50, "name": "Hendrik", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-hendrik.png", "sha256": "5b29aae10f863e2dee264532939acc23c92897e573b10fc97f577a5dc37336b2", "width": 3072, "height": 1792},
+      "original": {"path": "Heros/7.Hendrik/preview_atlas_white_bgHendrik.png", "sha256": "cdcc958e3cbf50fb43510bbb433dc462a3acaa49a3393ce049d3c977241b59b2", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Slam ends before detached rocks; bottom VFX-only row excluded. Oversize effect margins clip. Numbered aliases: skill1=skillShield, skill2=skillSlam; inferred action labels, not an authored skill manifest.",
+      "limitation": "Slam row ends before detached rocks; bottom VFX-only row excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-rowan.png", "sourceId": "rowan", "unitId": 52, "name": "Rowan", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-rowan.png", "sha256": "c7bfd9ae5517bb213507b3ef202e906bb9cb1a39f092596c34fd3fa08ff831ec", "width": 3072, "height": 1536},
+      "original": {"path": "Heros/8.Rowan/preview_atlas_white_bgRowan.png", "sha256": "2e466b8d981568a3f5c9a386208f93fa1867deafef6114c12dc024694c48849b", "dimensions": "830x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Right-edge partial effects excluded; only visible staff action available. Alias skill1=skillStaff; inferred label, not an authored full skill manifest. Oversize effect margins clip.",
+      "limitation": "Right-edge partial effects excluded; only the visible staff action is available for skills.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-gwyneth.png", "sourceId": "gwyneth", "unitId": 60, "name": "Gwyneth", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-gwyneth.png", "sha256": "db564fe0360039f05c725869ffe0f2169cbcc8622c9c82d4e6bc38742e4ebe3b", "width": 3072, "height": 2048},
+      "original": {"path": "Heros/9.Gwyneth/preview_atlas_white_bgGwyneth.png", "sha256": "026f252114b037dad83f45720ed76d7288e51cb1a555dff028112a1cd3f3b24e", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Projectile/target/pillar VFX-only cells excluded. Aliases skill1=skillVolley, skill2=skillFlame, skill3=skillPillar; inferred action labels, not an authored skill manifest. Oversize effect margins clip.",
+      "limitation": "Projectile/target/pillar VFX-only cells excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-rosaline.png", "sourceId": "rosaline", "unitId": 61, "name": "Rosaline", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-rosaline.png", "sha256": "e029ecfc3434671a704ba35791917c4ef81aaa0cc4fad34a27c85eadadf5717f", "width": 3072, "height": 1536},
+      "original": {"path": "Heros/10.Rosaline/rosaline_preview_atlas_white_bgRosaline.png", "sha256": "84170facf2fccb093ff30caa5dc8479cb7147bf645a3d147d43cbd1f26829e4b", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Bottom loose crockery and aura-only cells excluded. Alias skill1=skillTea; inferred action label, not an authored skill manifest. Oversize effect margins clipped.",
+      "limitation": "Bottom loose crockery and aura-only effects excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-cecilia.png", "sourceId": "cecilia", "unitId": 66, "name": "Cecilia", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-cecilia.png", "sha256": "849d24d8698fda8950d2f7cd85af6a6cf5f604c4b7f401bc8d3ba4d454f56ce4", "width": 3072, "height": 256},
+      "original": {"path": "Heros/11.Cecilia/reference_review_white_bgCecilia.png", "sha256": "6d2b001503b4c009144a1e08a6850055232a660b032b3871acb3543b79817adf", "dimensions": "1400x1560"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, complete portrait crop, scale 0.13, 256px cell anchored at x128/ground220. STATIC REFERENCE ONLY: one portrait, no authored animation. attack, hit, death and skill1 explicitly alias the single idle frame. No synthetic animation or full skill claimed.",
+      "limitation": "STATIC REFERENCE ONLY: one portrait, no authored animation. All action clips explicitly alias the static idle; no synthetic animation or skill claimed.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-rigby.png", "sourceId": "rigby", "unitId": 68, "name": "Rigby", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-rigby.png", "sha256": "0a4223c5d155077431b355fec70a1bf74166bdf516becfd6faea7cbc6e9cac20", "width": 3072, "height": 2304},
+      "original": {"path": "Heros/12.Rigby/preview_atlas_white_bgRigby.png", "sha256": "b1b086da60b61f5124db026176a4734d75d4f97a40b3af6f8385904c417b2f76", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Rolling barrels/projectiles/explosions excluded; barrel action retains four character windup poses only. Aliases skill1=skillBarrel, skill2=skillDrink, skill3=skillSpit, skill4=skillRoll; inferred labels, not authored full skills. Oversize effect margins clipped.",
+      "limitation": "Rolling barrel/projectile/explosion-only cells excluded; barrel skill retains only four character windup poses.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-oscar.png", "sourceId": "oscar", "unitId": 72, "name": "Oscar", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-oscar.png", "sha256": "1f9786d5f82980ea737e9dfa6bf4d34db43bf57f0305f8dbb16cb9e3fe59061c", "width": 3072, "height": 1024},
+      "original": {"path": "Heros/13.Oscar/preview_atlas_white_bgOscar.png", "sha256": "b4e3c13042c0367eebeb61605a93609690a989903acf26ad9e3199499e892c8d", "dimensions": "1536x657"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. No attack/skill action supplied: attack and skill1 explicitly alias idle. First death pose is head-cropped in the original and excluded. No authored attack or full skill claimed.",
+      "limitation": "No attack/skill action supplied: attack and skill1 explicitly alias idle. Death first pose is head-cropped in original; excluded by importer frame selection.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-eluard.png", "sourceId": "eluard", "unitId": 105, "name": "Eluard", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-eluard.png", "sha256": "aae078ba546de61fffc2e74ddbe5b9513fb67b814087fbbcb66227d1a0b94f37", "width": 3072, "height": 256},
+      "original": {"path": "Heros/14.Eluard/preview_atlas_white_bgEluard.png", "sha256": "49f7dd3e2dc581c50fe278b5e998d4ea6ea2a7da39879df5828f822b29bac22e", "dimensions": "4032x5760"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, one complete portrait crop, scale 0.14, 256px cell anchored at x128/ground220. STATIC REFERENCE ONLY: 3x4 source repeats one portrait, not action animation. attack, hit, death and skill1 explicitly alias single idle frame; no synthetic animation or full skill claimed. Distinct from awakened Catalyst of Fate.",
+      "limitation": "STATIC REFERENCE ONLY: supplied 3x4 sheet repeats one portrait, not action animation. Keep one full portrait; actions explicitly alias static idle.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-eluard-awakened.png", "sourceId": "eluard-awakened", "unitId": 248, "name": "Eluard - Catalyst of Fate", "sourceSpriteName": "Eluard - Catalyst of Fate", "sourceRosterName": "Eluard · Catalyst of Fate", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-eluard-awakened.png", "sha256": "252b9e71203d91d9ee8dc3ad1802274dcee41ba705082204a62c7ff5758bd42f", "width": 3072, "height": 2304},
+      "original": {"path": "Heros/15.EluardAwakend/preview_atlas_white_bgEluardAwakend.png", "sha256": "7b929cef0ebeada5016ec7633758651ce42ee41f6cc6425a44c4d6080457e834", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Catalyst of Fate identity from saved HTML filename. Hit reuses standing/crouch subset of shared death row. Right-side VFX-only columns excluded; large dome/effect margins clipped. Aliases skill1=skillFate, skill2=skillHourglass, skill3=skillCards, skill4=skillDome; inferred labels, not an authored skill manifest.",
+      "limitation": "Hit uses standing/crouch portion of shared hit/death row; full row used for death. Right-side VFX-only columns excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-peggy.png", "sourceId": "peggy", "unitId": 107, "name": "Peggy", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-peggy.png", "sha256": "2b1bdcc89c3847a17af675e399fdeaf3323c1fe6054622445fd3512c2c3e541e", "width": 3072, "height": 2304},
+      "original": {"path": "Heros/16.Peggy/preview_atlas_white_bgPeggy.png", "sha256": "72504d00be9113ba22aefa4bdcbec75346eca509a03fbdda335dac385913f6ee", "dimensions": "1010x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Guards/carriage/gifts are separate entities and excluded. Those action clips retain visible character windup poses only. Aliases skill1=skillGuards, skill2=skillCrown, skill3=skillCarriage, skill4=skillGift; not authored full skills. Oversize effect margins clip.",
+      "limitation": "Guards/carriage/gift-only cells are separate entities, excluded. Guard, carriage and gift skills retain only visible character windup poses.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-walker.png", "sourceId": "walker", "unitId": 110, "name": "Walker", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-walker.png", "sha256": "de572fec558317ac84528d519c2a0e07886b6daf5b3dcb6a40f16a6213b58610", "width": 3328, "height": 2048},
+      "original": {"path": "Heros/17.Walker/Cowboy Gunslinger Sprite Atlas.png", "sha256": "7f3237438ba0603337c7531b92d2f97490b395a65a0d760949880ff6f20b1be7", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. 13-column atlas. Hit reuses upright/crouch subset of shared action/death row. Detached projectile/impact-only and bottom VFX excluded. Aliases skill1=skillAim, skill2=skillDash, skill3=skillBarrage; inferred labels. Oversize effect margins clipped.",
+      "limitation": "Hit uses first seven upright/crouch poses of shared action/death row. Detached projectile/impact-only and bottom VFX rows excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-morrow.png", "sourceId": "morrow", "unitId": 116, "name": "Morrow", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-morrow.png", "sha256": "6942210cc392a80b2374e2dda8414f2d38e755909d8248d982ec870c755cf2b8", "width": 3072, "height": 1280},
+      "original": {"path": "Heros/18.Morrow/morrow_preview_atlas_white_bgMorrow.png", "sha256": "6c5e5404c60b939495e703c1282e55e1f52d27ad666d30c105ae5148c86757a6", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. No character skill rows: skill1, skill2 and skill3 explicitly alias sole attack/cast row. Portal, dome and explosion rows are VFX-only and excluded; faded death tail excluded. No authored full skills claimed.",
+      "limitation": "No character skill rows: skills explicitly reuse the sole cast/attack row. Portal, dome and explosion rows are VFX-only and excluded. Faded death tail excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-scarlet.png", "sourceId": "scarlet", "unitId": 127, "name": "Scarlet", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-scarlet.png", "sha256": "a713c300ad4e8ed6edf7b3fe7a0f328cd2cfc5632c07ac28a2222165124e24c5", "width": 3072, "height": 2048},
+      "original": {"path": "Heros/19.Scarlet/preview_atlas_white_bgScarlet.png", "sha256": "197647fc27739499250fc7d27679e2516e1c7c0facdef0f575418acb5173d490", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Detached bolts and ritual explosion-only cells excluded. Aliases skill1=skillRitual, skill2=skillBolt, skill3=skillStorm; inferred labels, not an authored skill manifest. Oversize effect margins clipped.",
+      "limitation": "Detached bolts and ritual explosion-only cells excluded.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-thane-awakened.png", "sourceId": "thane-awakened", "unitId": 134, "name": "Thane - The Veiled Wind", "sourceSpriteName": "Thane - The Veiled Wind", "sourceRosterName": "Thane · The Veiled Wind", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-thane-awakened.png", "sha256": "6fe3b4ddda93ebad860d67bc5ec6e3b64ef0c091e07a3f976b470fd84a9b3bf8", "width": 3072, "height": 2048},
+      "original": {"path": "Heros/20.Thane/preview_atlas_white_bgThane.png", "sha256": "062525f17ce2402e7996cfc96f287273c7e35003eef30fa1f58a61ae1254bda1", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. The Veiled Wind identity from saved HTML filename. Left portraits/turnarounds and bottom VFX-only strip excluded; overlapping wind trails trimmed at measured gutters. Aliases skill1=skillThrust, skill2=skillWind, skill3=skillWhirl; inferred labels, not an authored skill manifest.",
+      "limitation": "Portraits/turnarounds in left panel excluded; bottom VFX-only strip excluded. Wind row overlapping trails trimmed at measured gutters.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-sonja.png", "sourceId": "sonja", "unitId": 136, "name": "Sonja", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-sonja.png", "sha256": "7e768acc45ce95d60590220a4e58419d62d79f2eafa7ae6d3657bd6dc7b63e2c", "width": 4096, "height": 2048},
+      "original": {"path": "Heros/21.Sonja/preview_atlas_white_bgSonja.png", "sha256": "59d520660dc2051492983f15c42301d4e72d5e84f9b47a83bea7d67192fc2ad8", "dimensions": "6144x3072"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured character crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. 16-column output. Embedded purple target/effect art retained only in character-containing crops; wide aura margins clip rather than shrinking bodies. No clear run row. Aliases skill1=skillRoses, skill2=skillAura, skill3=skillShadow, skill4=skillRoseBlade; inferred labels, not an authored full skill manifest.",
+      "limitation": "16-column output required. Sparse source includes embedded purple target/effect art; retained only within character-containing crops. Wide aura margins clip at cell boundary while body scale stays fixed.", "sourceDate": "2026-11-13"
+    },
+    {
+      "path": "public/assets/oathbound/expanded-palmer.png", "sourceId": "palmer", "unitId": 150, "name": "Palmer", "origin": "you", "licence": {"id": "UNKNOWN"}, "ships": false,
+      "source": {"path": "prototypes/oathbound/assets/expanded-palmer.png", "sha256": "56e9fc4422b9ab46ad9ba135b6554c39d23526b586e948399d968f5c43da81e4", "width": 3072, "height": 1280},
+      "original": {"path": "Heros/22.Palmer/preview_atlas_white_bgPalmer.png", "sha256": "369c61facc5060b4e99300e726b466fa6fd8c04da47f4d614e766653fb9b9f16", "dimensions": "1536x1024"},
+      "transformation": "tools/import-expanded.cjs: edge-connected white cleanup, measured nonuniform crops, detached crop-edge pruning, fixed body scale and 256px cells anchored at x128/ground220. Support-skill rows are VFX-only and excluded. skill1, skill2 and skill3 explicitly alias staff attack action, not authored support animations. Oversize effect margins clipped.",
+      "limitation": "Supplied support-skill rows are effect-only; skills explicitly reuse staff action, not claimed as authored support animations.", "sourceDate": "2026-11-13"
+    }
+  ]
+}

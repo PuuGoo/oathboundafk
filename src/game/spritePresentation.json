@@ -1,0 +1,19 @@
+{
+  "characterScale": 1.4,
+  "action": { "basicSeconds": 0.4, "skillSeconds": 0.9, "ultimateSeconds": 1.35, "hitSeconds": 0.18, "staticDefeatOpacity": 0.3, "lungePixels": 18, "ultimateScale": 0.1,
+    "choreography": {
+      "anticipationEnd": 0.18, "releaseEnd": 0.46,
+      "thrust": { "anticipation": [-0.2, 0, -0.025, 0.99], "release": [1, -2, 0.045, 1.03] },
+      "volley": { "anticipation": [-0.12, 1, -0.035, 0.99], "release": [-0.3, -1, -0.055, 1.02] },
+      "arc": { "anticipation": [-0.16, 1, -0.065, 0.99], "release": [0.6, -3, 0.075, 1.035] },
+      "pillar": { "anticipation": [0, 1, 0.02, 0.98], "release": [0.08, -7, -0.02, 1.06] },
+      "orbit": { "anticipation": [-0.08, 0, -0.03, 0.99], "release": [0.15, -5, 0.045, 1.045] },
+      "rift": { "anticipation": [-0.16, 0, 0.045, 0.98], "release": [0.3, -3, -0.05, 1.025] },
+      "blessing": { "anticipation": [0, 1, 0, 0.99], "release": [0, -5, 0, 1.04] }
+    }
+  },
+  "effects": { "basicSeconds": 0.55, "skillSeconds": 1.15, "ultimateSeconds": 1.65, "impactSeconds": 0.5, "supportSeconds": 1.1, "recoverySeconds": 0.55, "recoveryRadius": 11, "recoveryRise": 7, "groundChargeEnd": 0.36, "groundOpacity": 0.3, "maxCount": 120, "lowMaxCount": 48, "particles": 14, "lowParticles": 6 },
+  "combatText": { "duration": 0.9, "mergeSeconds": 0.12, "maxCount": 48, "maxVisible": 16, "fontSize": 14, "criticalFontSize": 18, "risePixels": 26, "laneGap": 4, "edgePadding": 6 },
+  "unitStatus": { "gap": 3, "rows": 3, "maxHorizontalShift": 24 },
+  "ultimate": { "bannerSeconds": 2.4, "maxAnnouncements": 16, "maxVisible": 2, "comboWindowMs": 500, "shakePixels": 3, "dimOpacity": 0.25 }
+}
