@@ -498,7 +498,9 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
     // Anticipation stays on the caster; a fine energy ribbon connects to the actual recipient.
     if (p < 0.36) {
       const charge = p / 0.36;
-      halo(ax, ay, radius * (0.3 + charge * 0.45));
+      if (!['lance', 'blades', 'arrows', 'crossfire', 'daggers'].includes(art.motif)) {
+        halo(ax, ay, radius * (0.3 + charge * 0.45));
+      }
       ctx.save(); ctx.translate(ax, ay);
       if (art.motif === 'seraph') {
         const r = radius * (0.25 + charge * 0.25);
