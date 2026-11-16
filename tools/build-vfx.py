@@ -228,6 +228,17 @@ def transform(part, u, clip):
         scale = part.bulk * peak(t, a, b, c) * fade
         length = part.reach * ease(clamp((t - a) / max(b - a, 1e-6)))
         return part.base, (0, 0, spin * .3), (scale, scale, max(1e-4, length))
+    if role == 'lance':
+        # Hình học đã xoay sang trục X: kéo dài theo X, không theo Z.
+        scale = part.bulk * peak(t, a, b, c) * fade
+        length = part.reach * ease(clamp((t - a) / max(b - a, 1e-6)))
+        return part.base, (0, 0, spin * .3), (max(1e-4, length), scale, scale)
+    if role == 'dart':
+        out = part.spread * p['push'] * grow
+        loc = (part.base[0] + out, part.base[1] + math.sin(spin) * .08,
+               part.base[2] + math.cos(spin) * .08)
+        scale = part.bulk * peak(t, a, b, c) * fade
+        return loc, (0, spin * .2, 0), (scale, scale * .5, scale * .5)
     if role == 'column':
         scale = part.bulk * peak(t, a, c, c) * fade
         length = part.reach * ease(clamp(t / max(b, 1e-6)))
@@ -362,8 +373,23 @@ def build_storm():
     motes(8, 1.0, .045, 'vfx_glow', rise=.45, delay=.12)
 
 
+def build_gunfire():
+    """Súng: chớp đầu nòng, vệt đạn xuyên và vành xung kích nhỏ."""
+    cone('Muzzle blast', .34, .04, .7, 'vfx_glow', role='lance', axis='X',
+         reach=1.8, twist=.2)
+    cone('Muzzle flare', .2, 0.0, .5, 'vfx_core', role='lance', axis='X',
+         base=(0, 0, .12), reach=1.4, twist=-.3, delay=.01)
+    for i in range(7):
+        cone(f'Tracer {i + 1}', .05, .006, .9, 'vfx_core', role='dart', axis='X',
+             phase=-.5 + i * .16, spread=.5 + i * .06, delay=i * .015, twist=1.4)
+    rings(2, [.55, .78], [1.32, 1.2], ['vfx_glow', 'vfx_alt'], minor=.016, delay=.04)
+    spikes(10, .85, .34, 'vfx_glow', size=.036, delay=.05)
+    motes(8, .8, .05, 'vfx_alt', rise=.4, delay=.1)
+
+
 FAMILIES = {'sigil': build_sigil, 'strike': build_strike, 'lance': build_lance,
-            'volley': build_volley, 'bloom': build_bloom, 'storm': build_storm}
+            'volley': build_volley, 'bloom': build_bloom, 'storm': build_storm,
+            'gunfire': build_gunfire}
 
 
 def studio():

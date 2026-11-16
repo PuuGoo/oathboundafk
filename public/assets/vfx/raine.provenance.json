@@ -1,0 +1,56 @@
+{
+  "id": "raine",
+  "heroId": "raine",
+  "name": "Raine",
+  "family": "gunfire",
+  "source": "assets-source/vfx/raine/raine.blend",
+  "asset": "raine.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Ch\u1edbp \u0111\u1ea7u n\u00f2ng v\u00e0ng, v\u1ec7t \u0111\u1ea1n \u0111\u1ecf son v\u00e0 v\u00e0nh xung k\u00edch nh\u1ecf cho song s\u00fang l\u1ee5c.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 83
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 83
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 83
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 83
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 395176,
+    "glbSha256": "a5d036ab2a43fe9352d9d590cb7747b7ca2d2f0b2b543c9bdc06f763a53664ad",
+    "generatorSha256": "8a6fa18183e28646cd7780be95a83bd8f8f5df0168f8d5afba587b2e8ac139d4",
+    "specSha256": "f7cb3f5f4ed6fbe1a85fb29da176c33e0fc944885e6f876f4c06945202340e74",
+    "objects": 29,
+    "vertices": 961,
+    "triangles": 1810,
+    "meshes": 29,
+    "materials": 3
+  }
+}

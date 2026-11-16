@@ -16,7 +16,7 @@ const specs = JSON.parse(fs.readFileSync(path.join(root, 'tools/hero-vfx.json'),
 const heroes = new Map(OATHBOUND_HEROES.map(hero => [hero.heroId, hero]));
 for (const spec of specs) {
   assert.ok(heroes.has(spec.heroId), `${spec.id}: hero id must exist in the roster`);
-  assert.ok(['sigil', 'strike', 'lance', 'volley', 'bloom', 'storm'].includes(spec.family), `${spec.id}: unknown family`);
+  assert.ok(['sigil', 'strike', 'lance', 'volley', 'bloom', 'storm', 'gunfire'].includes(spec.family), `${spec.id}: unknown family`);
 }
 assert.equal(new Set(specs.map(spec => spec.id)).size, specs.length, 'duplicate effect id');
 const enabled = new Set(HERO_VFX_DEFINITIONS.map(definition => definition.heroId));
