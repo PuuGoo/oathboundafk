@@ -762,6 +762,58 @@ test('actual cast ground anticipation respects caller opacity without changing i
   }
 });
 
+test('actual awakened Thane ultimate converges open wind blades on its real damage recipient', () => {
+  const initial = createInitialData(), heroId = 'hero_134_thane';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
+    { ...hero, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
+    seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.sourceId === source.instanceId && e.castId === cast.castId &&
+    e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  for (const low of [false, true]) {
+    let previousDistance = Infinity;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, count = low ? 2 : 4;
+      const b = projectSpritePosition(target.x, target.y, 390, 530);
+      const translations = calls.filter(c => c[0] === 'translate');
+      assert.deepEqual(translations[0], ['translate', b.x, b.y - 48 * scale]);
+      assert.equal(translations.length, count + 1);
+      const distances = translations.slice(1).map(c => Math.hypot(Number(c[1]), Number(c[2])));
+      assert.ok(distances.every(d => d > radius * 0.3 && d < radius * 0.8));
+      assert.ok(distances[0] < previousDistance, 'blades converge instead of making a shared spinning magic ring');
+      previousDistance = distances[0];
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'closePath', 'createRadialGradient'].includes(String(c[0]))), false);
+      const rotations = calls.filter(c => c[0] === 'rotate');
+      assert.equal(rotations.length, count, 'each wind blade points inward');
+      for (let i = 0; i < count; i++) {
+        const angle = Math.atan2(Number(translations[i + 1][2]), Number(translations[i + 1][1]));
+        assert.ok(Math.abs(Math.sin(Number(rotations[i][1]) - angle - Math.PI)) < 1e-10);
+        assert.ok(Math.cos(Number(rotations[i][1]) - angle) < -0.99, 'blade tip faces the victim, not away');
+      }
+      for (const c of calls.filter(c => ['moveTo', 'quadraticCurveTo'].includes(String(c[0]))))
+        for (let i = 1; i < c.length; i += 2) assert.ok(Math.hypot(Number(c[i]), Number(c[i + 1])) < radius * 0.34);
+      assert.equal(calls.filter(c => c[0] === 'quadraticCurveTo').length, count * 3);
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 2, 'open edge and inner wind cut survive LOW');
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Belinda ultimate release descends as open branched light rays at the real victim', () => {
   const initial = createInitialData(), heroId = 'belinda';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;

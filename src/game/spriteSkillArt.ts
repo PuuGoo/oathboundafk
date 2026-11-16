@@ -560,7 +560,27 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
       const delivery = effect.ultimate ? art.ultimateDelivery : art.activeDelivery;
       const tx = ax + (bx - ax) * travel, ty = ay + (by - ay) * travel;
       ctx.globalAlpha *= 0.65;
-      if ((art.motif === 'aegis' || art.motif === 'coffin') && delivery === 'orbit') {
+      if (art.motif === 'blades' && delivery === 'orbit') {
+        // Wind blades converge inward, leaving the victim visible between open curved edges.
+        const count = lowQuality ? 2 : 4;
+        const distance = radius * (0.9 - travel * 0.55), size = radius * 0.32;
+        const bearing = Math.atan2(by - ay, bx - ax);
+        ctx.save(); ctx.translate(bx, by);
+        for (let i = 0; i < count; i++) {
+          const angle = bearing + art.angle + i * Math.PI * 2 / count;
+          ctx.save(); ctx.translate(Math.cos(angle) * distance, Math.sin(angle) * distance);
+          ctx.rotate(angle + Math.PI);
+          ctx.strokeStyle = art.primary;
+          ctx.beginPath(); ctx.moveTo(-size * 0.65, -size * 0.6);
+          ctx.quadraticCurveTo(size * 0.35, -size * 0.65, size * 0.8, 0);
+          ctx.quadraticCurveTo(size * 0.1, size * 0.15, -size * 0.65, size * 0.6); ctx.stroke();
+          ctx.strokeStyle = art.accent;
+          ctx.beginPath(); ctx.moveTo(-size * 0.55, -size * 0.25);
+          ctx.quadraticCurveTo(size * 0.1, -size * 0.35, size * 0.48, 0); ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+      } else if ((art.motif === 'aegis' || art.motif === 'coffin') && delivery === 'orbit') {
         // Transparent shield faces or coffin seals converge at the real opponent without orbit ribbons.
         const count = lowQuality ? 2 : 3, h = radius * 0.28, w = h * 0.65;
         const distance = radius * (0.65 - travel * 0.35);
