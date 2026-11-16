@@ -564,7 +564,21 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
       } else if (['lance', 'blades', 'arrows', 'crossfire', 'daggers'].includes(art.motif)) {
         const size = radius * (0.22 + charge * 0.22);
         if (art.motif === 'blades') {
-          if (effect.sourceHeroId === 'cecilia' && !effect.ultimate) {
+          if (effect.sourceHeroId === 'hero_134_thane' && effect.ultimate) {
+            const bearing = Math.atan2(by - ay, bx - ax), gap = radius * (0.2 - charge * 0.1);
+            const windSize = size * 0.65;
+            for (const side of [-1, 1]) {
+              ctx.save(); ctx.translate(-Math.sin(bearing) * gap * side, Math.cos(bearing) * gap * side);
+              ctx.rotate(bearing); ctx.strokeStyle = art.primary;
+              ctx.beginPath(); ctx.moveTo(-windSize * 0.65, -windSize * 0.6);
+              ctx.quadraticCurveTo(windSize * 0.35, -windSize * 0.65, windSize * 0.8, 0);
+              ctx.quadraticCurveTo(windSize * 0.1, windSize * 0.15, -windSize * 0.65, windSize * 0.6); ctx.stroke();
+              ctx.strokeStyle = art.accent;
+              ctx.beginPath(); ctx.moveTo(-windSize * 0.55, -windSize * 0.25);
+              ctx.quadraticCurveTo(windSize * 0.1, -windSize * 0.35, windSize * 0.48, 0); ctx.stroke();
+              ctx.restore();
+            }
+          } else if (effect.sourceHeroId === 'cecilia' && !effect.ultimate) {
             const bearing = Math.atan2(by - ay, bx - ax), gap = radius * (0.2 - charge * 0.1);
             for (const side of [-1, 1]) {
               blade(-Math.sin(bearing) * gap * side, Math.cos(bearing) * gap * side, size * 0.6);
