@@ -597,7 +597,7 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
     assert.notEqual(source.team, target.team);
     assert.ok(entries.some(e => e.castId === cast.castId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
-    for (const phase of [0.12, 0.28]) for (const low of [false, true]) {
+    for (const phase of [0.08, 0.14, 0.28]) for (const low of [false, true]) {
       effect.age = effect.duration * phase;
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
@@ -608,7 +608,22 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
       const a = projectSpritePosition(source.x, source.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
       assert.ok(calls.some(c => c[0] === 'translate' && c[1] === a.x && c[2] === a.y - 53 * scale));
       assert.ok(calls.some(c => c[0] === 'rotate'), 'aimed weapon silhouette remains');
-      assert.ok(calls.some(c => c[0] === 'fill') && calls.some(c => c[0] === 'stroke'));
+      if (heroId === 'walker' && phase < 0.16) {
+        assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x, a.y - 53 * scale]], 'active readies one caster-local shotgun');
+        const b = projectSpritePosition(target.x, target.y, 390, 530);
+        const bearing = Math.atan2(b.y - a.y + 5 * scale, b.x - a.x);
+        const rotations = calls.filter(c => c[0] === 'rotate');
+        assert.equal(rotations.length, 1);
+        assert.ok(Math.abs(Number(rotations[0][1]) - bearing) < 1e-8);
+        assert.equal(calls.filter(c => c[0] === 'closePath').length, 1);
+        assert.equal(calls.filter(c => c[0] === 'stroke').length, 3, 'profile, barrel seam and pump grip');
+        assert.equal(calls.some(c => ['fill', 'ellipse', 'quadraticCurveTo'].includes(String(c[0]))), false, 'no bullet or flash before release');
+        const radius = 43 * scale, size = radius * (0.85 + phase / 0.36 * 0.15);
+        assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === -size * 0.34 && c[2] === size * 0.15), 'broad shotgun shoulder stock');
+        assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === size * 0.38 && c[2] === -size * 0.07), 'long shotgun barrel');
+        for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+          assert.ok(Number.isFinite(Number(c[1])) && Number.isFinite(Number(c[2])) && Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.4);
+      } else assert.ok(calls.some(c => c[0] === 'fill') && calls.some(c => c[0] === 'stroke'));
       assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
       assert.deepEqual(effect, before);
     }

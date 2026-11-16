@@ -640,7 +640,7 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.fillStyle = art.accent;
           path([[size, 0], [size * 0.35, -size * 0.2], [size * 0.5, 0], [size * 0.35, size * 0.2]], true, true);
           ctx.restore();
-        } else if (art.motif === 'crossfire' && effect.sourceHeroId === 'walker' && effect.ultimate) {
+        } else if (art.motif === 'crossfire' && effect.sourceHeroId === 'walker') {
           const bearing = Math.atan2(by - ay, bx - ax), size = radius * (0.85 + charge * 0.15);
           ctx.rotate(bearing); ctx.strokeStyle = art.primary;
           // Walker readies one shotgun: long barrel, pump and broad shoulder stock.
