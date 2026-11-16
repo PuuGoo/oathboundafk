@@ -856,6 +856,53 @@ test('actual awakened Thane ultimate converges open wind blades on its real dama
   }
 });
 
+test('actual Cecilia ultimate converges open blade pairs rather than a generic rift gate', () => {
+  const initial = createInitialData(), heroId = 'cecilia';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.castId === cast.castId && e.sourceId === source.instanceId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  for (const low of [false, true]) {
+    let previous = Infinity;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, count = low ? 2 : 4;
+      const b = projectSpritePosition(target.x, target.y, 390, 530);
+      const moves = calls.filter(c => c[0] === 'translate'), rotations = calls.filter(c => c[0] === 'rotate');
+      assert.deepEqual(moves[0], ['translate', b.x, b.y - 48 * scale]);
+      assert.equal(moves.length, count + 1); assert.equal(rotations.length, count);
+      const distance = Math.hypot(Number(moves[1][1]), Number(moves[1][2]));
+      assert.ok(distance < previous && distance > radius * 0.15 && distance < radius * 0.7); previous = distance;
+      const a = projectSpritePosition(source.x, source.y, 390, 530);
+      const bearing = Math.atan2(b.y - 48 * scale - (a.y - 53 * scale), b.x - a.x);
+      for (let i = 0; i < count; i++) {
+        const angle = bearing + getSpriteSkillArt(heroId)!.angle + Math.PI / 4 + i * Math.PI * 2 / count;
+        assert.ok(Math.abs(Number(moves[i + 1][1]) - Math.cos(angle) * distance) < 1e-8);
+        assert.ok(Math.abs(Number(moves[i + 1][2]) - Math.sin(angle) * distance) < 1e-8);
+        assert.ok(Math.cos(Number(rotations[i][1]) - angle) < -0.99);
+      }
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'closePath', 'quadraticCurveTo', 'createRadialGradient'].includes(String(c[0]))), false);
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 2);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+        assert.ok(Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.4);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Belinda ultimate release descends as open branched light rays at the real victim', () => {
   const initial = createInitialData(), heroId = 'belinda';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;

@@ -794,6 +794,23 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           }
           ctx.restore(); break;
         case 'rift':
+          if (art.motif === 'blades') {
+            // Cecilia's paired blade edges close toward the victim, not a generic magical gate.
+            const count = lowQuality ? 2 : 4, size = radius * 0.34;
+            const distance = radius * (0.78 - travel * 0.55);
+            const bearing = Math.atan2(by - ay, bx - ax);
+            ctx.save(); ctx.translate(bx, by);
+            for (let i = 0; i < count; i++) {
+              const angle = bearing + art.angle + Math.PI / 4 + i * Math.PI * 2 / count;
+              ctx.save(); ctx.translate(Math.cos(angle) * distance, Math.sin(angle) * distance);
+              ctx.rotate(angle + Math.PI); ctx.strokeStyle = art.primary;
+              path([[-size * 0.65, -size * 0.38], [size * 0.85, 0], [-size * 0.65, size * 0.38]]);
+              ctx.strokeStyle = art.accent;
+              path([[-size * 0.4, -size * 0.18], [size * 0.48, 0], [-size * 0.4, size * 0.18]]);
+              ctx.restore();
+            }
+            ctx.restore(); break;
+          }
           if (art.motif === 'vortex') {
             // Hollow curls descend into the real recipient instead of the shared slit and ellipse gates.
             const count = lowQuality ? 2 : 3;
