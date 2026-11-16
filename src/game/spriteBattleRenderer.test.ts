@@ -1186,6 +1186,33 @@ test('actual Belinda ultimate release descends as open branched light rays at th
       assert.deepEqual(effect, before);
     }
   }
+  for (const low of [false, true]) {
+    let previousWidth = 0;
+    for (const phase of [0.08, 0.14]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, featherCount = low ? 2 : 3;
+      const a = projectSpritePosition(source.x, source.y, 390, 530);
+      assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x, a.y - 53 * scale]]);
+      const curves = calls.filter(c => c[0] === 'quadraticCurveTo'); assert.equal(curves.length, 4, 'two open luminous wings');
+      const width = radius * (0.22 + phase / 0.36 * 0.2);
+      assert.ok(width > previousWidth); previousWidth = width;
+      assert.deepEqual(curves[0], ['quadraticCurveTo', -width * 0.5, -radius * 0.28, -width, -radius * 0.24]);
+      assert.deepEqual(curves[2], ['quadraticCurveTo', width * 0.5, -radius * 0.28, width, -radius * 0.24]);
+      assert.equal(calls.filter(c => c[0] === 'lineTo').length, (low ? 4 : 8) + featherCount * 2, 'sun rays plus distinct open feather marks');
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, 1 + (low ? 4 : 8) + 2 + featherCount * 2);
+      assert.equal(calls.filter(c => c[0] === 'arc').length, 1, 'small sun core remains');
+      assert.equal(calls.some(c => ['fill', 'ellipse', 'rotate', 'closePath', 'createRadialGradient'].includes(String(c[0]))), false);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo', 'quadraticCurveTo'].includes(String(c[0]))))
+        for (const v of c.slice(1)) assert.ok(Number.isFinite(v) && Math.abs(Number(v)) <= radius * 0.5);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
 });
 
 test('actual Scarlet ultimate descends as hollow curling vortex strands at its real damage recipient', () => {

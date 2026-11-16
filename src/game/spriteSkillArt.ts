@@ -511,6 +511,21 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           path([[Math.cos(angle) * r * 0.7, Math.sin(angle) * r * 0.7],
             [Math.cos(angle) * r, Math.sin(angle) * r]]);
         }
+        if (effect.sourceHeroId === 'belinda' && effect.ultimate) {
+          const width = radius * (0.22 + charge * 0.2), feathers = lowQuality ? 2 : 3;
+          for (const side of [-1, 1]) {
+            ctx.strokeStyle = art.primary;
+            ctx.beginPath(); ctx.moveTo(side * radius * 0.08, 0);
+            ctx.quadraticCurveTo(side * width * 0.5, -radius * 0.28, side * width, -radius * 0.24);
+            ctx.quadraticCurveTo(side * width * 0.85, radius * 0.02, side * radius * 0.12, radius * 0.12); ctx.stroke();
+            ctx.strokeStyle = art.accent;
+            for (let i = 0; i < feathers; i++) {
+              const t = (i + 1) / (feathers + 1);
+              path([[side * width * (0.4 + t * 0.4), -radius * (0.15 - t * 0.06)],
+                [side * width * (0.22 + t * 0.4), radius * (0.04 + t * 0.05)]]);
+            }
+          }
+        }
       } else if (art.motif === 'vortex') {
         for (let i = 0; i < (lowQuality ? 2 : 3); i++) {
           const angle = -charge * Math.PI + i * Math.PI * 2 / 3;
