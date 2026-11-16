@@ -805,24 +805,52 @@ test('Fawkes and Morrow open distinct recipient-local coffin doors and an eye du
 });
 
 test('Belinda and Scarlet anticipation uses a caster-local sun or vortex rather than shared spinning diamonds', () => {
-  for (const heroId of ['belinda', 'scarlet']) for (const low of [false, true]) {
-    const source = { ...fixture(), heroId, x: 180, y: 210 };
-    const target = { ...source, instanceId: 'charge-recipient', team: 'enemy' as const, x: 740, y: 300 };
-    const effect = createSpriteEffect({ id: 1210, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-    effect.age = effect.duration * 0.12;
-    const before = structuredClone(effect), calls: unknown[][] = [];
-    const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
-      calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
-    }, set: () => true }) as CanvasRenderingContext2D;
-    drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
-    assert.equal(calls.some(call => call[0] === 'rotate'), false, 'charge does not rotate a generic diamond wheel');
-    assert.equal(calls.filter(call => call[0] === 'fill').length, 1, 'only the restrained caster halo is filled');
-    if (heroId === 'belinda') assert.ok(calls.filter(call => call[0] === 'lineTo').length >= 4, 'sun has distinct radial light marks');
-    else assert.ok(calls.filter(call => call[0] === 'arc').length >= 3, 'vortex has separate open coils');
-    const a = projectSpritePosition(source.x, source.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
-    assert.ok(calls.some(call => call[0] === 'translate' && call[1] === a.x && call[2] === a.y - 53 * scale));
-    assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
-    assert.deepEqual(effect, before);
+  for (const heroId of ['belinda', 'scarlet']) {
+    const initial = createInitialData();
+    const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+    const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
+      { ...hero, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+    const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
+      seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+    const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    sim.consumeEvents(); let entries: CombatEvent[] = [];
+    for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
+      sim.step(50); entries = sim.consumeEvents();
+      if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
+    }
+    const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
+    assert.ok(cast);
+    const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.active.targetType);
+    assert.notEqual(target.team, source.team);
+    assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
+    const effect = createSpriteEffect(cast, source, target)!;
+    for (const phase of [0.08, 0.14]) for (const reduced of [false, true]) for (const low of [false, true]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
+      assert.equal(calls.some(call => call[0] === 'rotate'), false, 'charge does not rotate a generic diamond wheel');
+      assert.equal(calls.some(call => call[0] === 'fill' || call[0] === 'createRadialGradient'), false,
+        `${heroId}: no shared filled disc behind its sun or open vortex`);
+      if (!reduced) {
+        if (heroId === 'belinda') {
+          assert.equal(calls.filter(call => call[0] === 'lineTo').length, low ? 4 : 8, 'sun retains its distinct radial light marks');
+          assert.equal(calls.filter(call => call[0] === 'arc').length, 1, 'only the small outlined sun remains');
+        } else {
+          const coils = calls.filter(call => call[0] === 'arc');
+          assert.equal(coils.length, low ? 2 : 3, 'separate open vortex coils remain');
+          for (const coil of coils) assert.ok(Math.abs(Number(coil[5]) - Number(coil[4])) < Math.PI * 2);
+        }
+        const a = projectSpritePosition(source.x, source.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
+        assert.ok(calls.some(call => call[0] === 'translate' && call[1] === a.x && call[2] === a.y - 53 * scale));
+      }
+      assert.ok(calls.some(call => call[0] === 'stroke'), 'static reduced feedback remains');
+      assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+      for (const call of calls) for (const value of call.slice(1)) if (typeof value === 'number') assert.ok(Number.isFinite(value));
+      assert.deepEqual(effect, before);
+    }
   }
 });
 
