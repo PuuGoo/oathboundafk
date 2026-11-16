@@ -109,7 +109,8 @@ export function drawSpriteBattleLayers(units: readonly BattleUnitRuntime[], effe
     if (!reducedMotion && recipient && effect.kind === 'cast' && effect.support && !effect.basic &&
       (effect.skillSlot === 'active' || effect.skillSlot === 'ultimate') && getSpriteSkillArt(effect.sourceHeroId)) {
       const batch = props.get(recipient.instanceId) || [];
-      batch.push(effect); props.set(recipient.instanceId, batch);
+      // Re-anchor only the drawn blessing; immutable cast snapshots still own attacks and outcomes.
+      batch.push({ ...effect, target: { x: recipient.x, y: recipient.y } }); props.set(recipient.instanceId, batch);
     } else front.push(effect);
   }
   for (const unit of [...units].sort((a, b) => a.y - b.y || a.x - b.x)) {

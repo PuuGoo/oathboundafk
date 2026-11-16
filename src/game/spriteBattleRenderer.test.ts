@@ -45,11 +45,12 @@ test('real support cast props follow recipient body depth while attacks and outc
     assert.equal(recipient.team, source.team);
     assert.ok(entries.some(e => e.castId === cast.castId && e.targetId === recipient.instanceId && ['heal', 'shield', 'buff'].includes(e.type)));
     const prop = createSpriteEffect(cast, source, recipient)!;
-    const back = { ...recipient, instanceId: 'back', y: recipient.y - 1 };
-    const near = { ...recipient, instanceId: 'near', y: recipient.y + 1 };
-    const sameRow = { ...recipient, instanceId: 'same-row', x: recipient.x + 1 };
-    const dead = { ...recipient, instanceId: 'dead-recipient', isAlive: false };
-    const units = [near, sameRow, recipient, back, dead];
+    const movedRecipient = { ...recipient, x: recipient.x + 24, y: recipient.y + 12 };
+    const back = { ...movedRecipient, instanceId: 'back', y: movedRecipient.y - 1 };
+    const near = { ...movedRecipient, instanceId: 'near', y: movedRecipient.y + 1 };
+    const sameRow = { ...movedRecipient, instanceId: 'same-row', x: movedRecipient.x + 1 };
+    const dead = { ...movedRecipient, instanceId: 'dead-recipient', isAlive: false };
+    const units = [near, sameRow, movedRecipient, back, dead];
     const impact = { ...prop, id: -1, kind: 'impact' as const, support: false };
     const ward = { ...prop, id: -2, kind: 'shield' as const };
     const offensive = { ...prop, id: -3, support: false };
@@ -61,11 +62,17 @@ test('real support cast props follow recipient body depth while attacks and outc
     const effects: SpriteEffect[] = [impact, prop, ward, offensive, basic, orphan, legacy, deadProp, unknown];
     const before = structuredClone({ units, effects });
     for (const reduced of [false, true]) {
-      const order: string[] = [];
+      const order: string[] = [], drawn: SpriteEffect[] = [];
       drawSpriteBattleLayers(units, effects, reduced, u => order.push('body:' + u.instanceId), (batch, layer) => {
         if (layer === 'ground') order.push('ground');
-        else batch.forEach(e => order.push('effect:' + e.id));
+        else { drawn.push(...batch); batch.forEach(e => order.push('effect:' + e.id)); }
       });
+      const drawnProp = drawn.find(e => e.id === prop.id)!;
+      assert.deepEqual(drawnProp.target, reduced ? prop.target : { x: movedRecipient.x, y: movedRecipient.y },
+        'normal support prop follows the live recipient, reduced motion retains existing coordinates');
+      assert.deepEqual(drawnProp.source, prop.source);
+      assert.equal(drawnProp.age, prop.age); assert.equal(drawnProp.duration, prop.duration);
+      for (const other of effects.filter(e => e !== prop)) assert.equal(drawn.find(e => e.id === other.id), other, 'other feedback keeps original snapshot');
       const index = (value: string) => order.indexOf(value);
       assert.equal(order[0], 'ground');
       assert.ok(index('body:back') < index('body:' + recipient.instanceId));
