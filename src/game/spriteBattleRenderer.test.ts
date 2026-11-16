@@ -1009,6 +1009,34 @@ test('actual Cecilia active delivers paired small blades along its real opponent
   a.y -= 53 * scale; b.y -= 48 * scale;
   const angle = Math.atan2(b.y - a.y, b.x - a.x);
   for (const low of [false, true]) {
+    let previousChargeGap = Infinity;
+    for (const phase of [0.08, 0.14]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const moves = calls.filter(c => c[0] === 'translate');
+      assert.equal(moves.length, 3, 'caster anchor and two prepared blade offsets');
+      assert.deepEqual(moves[0], ['translate', a.x, a.y]);
+      const dx = Number(moves[2][1]) - Number(moves[1][1]), dy = Number(moves[2][2]) - Number(moves[1][2]);
+      const gap = Math.hypot(dx, dy);
+      assert.ok(gap > radius * 0.1 && gap < radius * 0.5 && gap < previousChargeGap);
+      previousChargeGap = gap;
+      assert.ok(Math.abs(dx * Math.cos(angle) + dy * Math.sin(angle)) < 1e-8, 'prepared pair flanks actual bearing');
+      assert.ok(Math.abs(Number(moves[1][1]) + Number(moves[2][1])) < 1e-8);
+      assert.ok(Math.abs(Number(moves[1][2]) + Number(moves[2][2])) < 1e-8);
+      const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 2);
+      rotations.forEach(c => assert.ok(Math.abs(Number(c[1]) - angle) < 1e-8));
+      assert.equal(calls.filter(c => c[0] === 'fill').length, 2);
+      assert.equal(calls.filter(c => c[0] === 'quadraticCurveTo').length, 6);
+      assert.equal(calls.some(c => c[0] === 'createRadialGradient' || c[0] === 'arc'), false);
+      for (const c of calls.filter(c => ['moveTo', 'quadraticCurveTo'].includes(String(c[0]))))
+        for (let i = 1; i < c.length; i += 2) assert.ok(Math.hypot(Number(c[i]), Number(c[i + 1])) <= radius * 0.4);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
     let previousGap = Infinity;
     for (const phase of [0.36, 0.42]) {
       effect.age = effect.duration * phase;

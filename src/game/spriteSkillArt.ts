@@ -563,8 +563,14 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
         }
       } else if (['lance', 'blades', 'arrows', 'crossfire', 'daggers'].includes(art.motif)) {
         const size = radius * (0.22 + charge * 0.22);
-        if (art.motif === 'blades') blade(0, 0, size);
-        else if (art.motif === 'lance') {
+        if (art.motif === 'blades') {
+          if (effect.sourceHeroId === 'cecilia' && !effect.ultimate) {
+            const bearing = Math.atan2(by - ay, bx - ax), gap = radius * (0.2 - charge * 0.1);
+            for (const side of [-1, 1]) {
+              blade(-Math.sin(bearing) * gap * side, Math.cos(bearing) * gap * side, size * 0.6);
+            }
+          } else blade(0, 0, size);
+        } else if (art.motif === 'lance') {
           ctx.save(); ctx.rotate(Math.atan2(by - ay, bx - ax));
           ctx.strokeStyle = art.primary;
           path([[-size, 0], [size * 0.5, 0]]);
