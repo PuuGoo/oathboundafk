@@ -595,12 +595,27 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
       } else if (art.motif === 'prism') {
         const size = radius * (0.22 + charge * 0.3);
         const spread = size * (effect.sourceHeroId === 'hero_248_eluard' ? 0.9 : 0.6);
-        // Three transparent facets unfold at the caster; no spinning wheel or opaque body cover.
-        for (let i = -1; i <= 1; i++) {
-          const x = i * spread, y = Math.abs(i) * size * 0.18;
-          ctx.strokeStyle = i === 0 ? art.accent : art.primary;
-          path([[x, y - size], [x + size * 0.35, y], [x, y + size * 0.75], [x - size * 0.35, y]], true);
-          path([[x, y - size], [x, y + size * 0.75]]);
+        if (effect.sourceHeroId === 'hero_248_eluard' && effect.ultimate) {
+          const count = lowQuality ? 2 : 4, distance = radius * (0.16 + charge * 0.12);
+          const h = size * 0.65, w = size * 0.22;
+          for (let i = 0; i < count; i++) {
+            const angle = -Math.PI / 2 + i * Math.PI * 2 / count;
+            ctx.save(); ctx.translate(Math.cos(angle) * distance, Math.sin(angle) * distance);
+            ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+            path([[0, -h], [w, 0], [0, h], [-w, 0]], true);
+            ctx.strokeStyle = art.accent;
+            path([[0, -h], [0, h]]);
+            path([[-w, 0], [w, 0]]);
+            ctx.restore();
+          }
+        } else {
+          // Three transparent facets unfold at the caster; no spinning wheel or opaque body cover.
+          for (let i = -1; i <= 1; i++) {
+            const x = i * spread, y = Math.abs(i) * size * 0.18;
+            ctx.strokeStyle = i === 0 ? art.accent : art.primary;
+            path([[x, y - size], [x + size * 0.35, y], [x, y + size * 0.75], [x - size * 0.35, y]], true);
+            path([[x, y - size], [x, y + size * 0.75]]);
+          }
         }
       } else {
         ctx.rotate(art.angle + p * 2);

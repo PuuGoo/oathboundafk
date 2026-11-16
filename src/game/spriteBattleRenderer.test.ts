@@ -1354,6 +1354,33 @@ test('actual awakened Eluard ultimate converges four transparent sanctuary facet
   const b = projectSpritePosition(target.x, target.y, 390, 530);
   for (const low of [false, true]) {
     const count = low ? 2 : 4;
+    let previousChargeSpread = 0;
+    for (const phase of [0.08, 0.14]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const moves = calls.filter(c => c[0] === 'translate'), a = projectSpritePosition(source.x, source.y, 390, 530);
+      assert.equal(moves.length, count + 1, 'caster anchor plus independently prepared sanctuary faces');
+      assert.deepEqual(moves[0], ['translate', a.x, a.y - 53 * scale]);
+      const spread = radius * (0.16 + phase / 0.36 * 0.12);
+      assert.ok(spread > previousChargeSpread); previousChargeSpread = spread;
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + i * Math.PI * 2 / count;
+        assert.ok(Math.abs(Number(moves[i + 1][1]) - Math.cos(angle) * spread) < 1e-8);
+        assert.ok(Math.abs(Number(moves[i + 1][2]) - Math.sin(angle) * spread) < 1e-8);
+      }
+      assert.equal(calls.filter(c => c[0] === 'closePath').length, count);
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 3, 'charge facets retain both seams on LOW');
+      assert.equal(calls.some(c => ['fill', 'ellipse', 'arc', 'rotate', 'createRadialGradient', 'quadraticCurveTo'].includes(String(c[0]))), false);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0])))) {
+        assert.ok(Math.abs(Number(c[1])) <= radius * 0.1 && Math.abs(Number(c[2])) <= radius * 0.3);
+      }
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
     let previousDistance = Infinity, previousWidth = 0;
     for (const phase of [0.36, 0.42]) {
       effect.age = effect.duration * phase;
