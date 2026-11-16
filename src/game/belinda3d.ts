@@ -1,6 +1,8 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type { BattleUnitRuntime } from './types';
 import type { SpriteActor } from './spriteBattleRenderer';
+import type { SpriteEffect } from './spriteBattleEffects';
+import { createBelindaSpellScene, type BelindaSpellFrame } from './belindaSpell3d';
 
 export type BelindaClip = 'idle' | 'run' | 'basic' | 'active' | 'ultimate' | 'hit' | 'death';
 export interface BelindaPose { clip: BelindaClip; seconds: number }
@@ -24,6 +26,9 @@ export interface BelindaRenderBackend {
   /** Returns false on unavailable rendering; caller draws the original sprite instead. */
   draw(ctx: CanvasRenderingContext2D, unit: BattleUnitRuntime, actor: SpriteActor, elapsedMs: number,
     reducedMotion: boolean, x: number, y: number, scale: number): boolean;
+  /** Successful IDs alone may replace their Canvas2D counterparts; failures keep fallback intact. */
+  drawSpells?(ctx: CanvasRenderingContext2D, effects: readonly SpriteEffect[], layer: 'ground' | 'front',
+    frame: Omit<BelindaSpellFrame, 'staffAnchors'>): Set<number>;
   /** Releases per-battle instances, retaining the shared model and renderer. */
   reset(): void;
   /** Releases GPU resources and all instances. Must not mutate combat state. */
@@ -50,6 +55,12 @@ export function createBelinda3D(load: () => Promise<BelindaRenderBackend> = load
       if (!backend) return false;
       try { return backend.draw(...args); }
       catch { state = 'failed'; release(); return false; }
+    },
+    drawSpells(ctx: CanvasRenderingContext2D, effects: readonly SpriteEffect[], layer: 'ground' | 'front',
+      frame: Omit<BelindaSpellFrame, 'staffAnchors'>): Set<number> {
+      if (state !== 'ready' || !backend?.drawSpells) return new Set();
+      try { return backend.drawSpells(ctx, effects, layer, frame); }
+      catch { state = 'failed'; release(); return new Set(); }
     },
     reset() { try { backend?.reset(); } catch { state = 'failed'; release(); } },
     dispose() { if (state === 'disposed') return; state = 'disposed'; release(); },
@@ -90,7 +101,11 @@ async function loadBelindaBackend(): Promise<BelindaRenderBackend> {
   if (required.some(name => !clips.has(name))) {
     resources(); renderer.dispose(); renderer.forceContextLoss(); throw new Error('Incomplete Belinda animation asset');
   }
+  const spells = createBelindaSpellScene(THREE);
+  const staffAnchors = new Map<string, { x: number; y: number }>();
+  let spellFailed = false;
   type Instance = { root: import('three').Object3D; mixer: import('three').AnimationMixer;
+    staff?: import('three').Object3D; staffLocal?: import('three').Vector3;
     pose?: BelindaPose; action?: import('three').AnimationAction };
   const instances = new Map<string, Instance>();
   const reset = () => {
@@ -99,15 +114,30 @@ async function loadBelindaBackend(): Promise<BelindaRenderBackend> {
       instance.root.traverse(object => { if (object instanceof THREE.SkinnedMesh) object.skeleton.dispose(); });
       scene.remove(instance.root);
     }
-    instances.clear();
+    instances.clear(); staffAnchors.clear();
   };
   return {
+    drawSpells(ctx, effects, layer, frame) {
+      const handled = new Set<number>();
+      if (spellFailed) return handled;
+      // Fixed shared buffer avoids resizing/reallocating the context between body and spell passes.
+      for (const effect of effects) {
+        try {
+          if (spells.draw(renderer, ctx, effect, layer, { ...frame, staffAnchors })) handled.add(effect.id);
+        } catch { spellFailed = true; break; } // Preserve already composited IDs; never retry a failed spell pass each frame.
+      }
+      return handled;
+    },
     draw(ctx, unit, actor, elapsedMs, reducedMotion, x, y, scale) {
       if (renderer.getContext().isContextLost()) throw new Error('Belinda WebGL context lost');
       let instance = instances.get(unit.instanceId);
       if (!instance) {
         const root = clone(gltf.scene); root.visible = false; scene.add(root);
-        instance = { root, mixer: new THREE.AnimationMixer(root) }; instances.set(unit.instanceId, instance);
+        root.updateMatrixWorld(true);
+        const staff = root.getObjectByName('hand.R');
+        // Authoring gem center converted from Blender Z-up to glTF Y-up, then into rest-bone space.
+        const staffLocal = staff?.worldToLocal(new THREE.Vector3(.51, 2.59, .12));
+        instance = { root, staff, staffLocal, mixer: new THREE.AnimationMixer(root) }; instances.set(unit.instanceId, instance);
       }
       const pose = getBelindaPose(unit, actor, elapsedMs, reducedMotion, instance.pose);
       const clip = clips.get(pose.clip)!;
@@ -129,6 +159,12 @@ async function loadBelindaBackend(): Promise<BelindaRenderBackend> {
       const footX = (anchor.x + 1) / 2, footY = (1 - anchor.y) / 2;
       try { renderer.render(scene, camera); } finally { instance.root.visible = false; }
       const w = 122 * scale / camera.zoom, h = w * 448 / 384;
+      if (instance.staff && instance.staffLocal) {
+        instance.root.updateMatrixWorld(true);
+        const tip = instance.staff.localToWorld(instance.staffLocal.clone()).project(camera);
+        staffAnchors.set(unit.instanceId, { x: x + (unit.facing < 0 ? -1 : 1) * ((tip.x + 1) / 2 - footX) * w,
+          y: y + ((1 - tip.y) / 2 - footY) * h });
+      }
       ctx.save();
       try {
         ctx.translate(x, y); ctx.scale(unit.facing < 0 ? -1 : 1, 1);
@@ -139,6 +175,6 @@ async function loadBelindaBackend(): Promise<BelindaRenderBackend> {
       return true;
     },
     reset,
-    dispose() { reset(); resources(); renderer.dispose(); renderer.forceContextLoss(); },
+    dispose() { reset(); spells.dispose(); resources(); renderer.dispose(); renderer.forceContextLoss(); },
   };
 }

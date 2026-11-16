@@ -18,6 +18,7 @@ import type { BattleUnitRuntime, CombatEvent } from '../game/types';
 import { isUnitAvailable } from '../game/types';
 import { soundEngine } from '../game/audio';
 import { createBelinda3D } from '../game/belinda3d';
+import { spellEffectsForFallback } from '../game/belindaSpell3d';
 
 /** Active hybrid battle: Canvas2D sprites with a live WebGL Belinda, falling back to her source sheet. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -141,7 +142,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         }
         if (source && target) {
           const effect = createSpriteEffect(event, source, target);
-          if (effect) effects.push(effect);
+          if (effect) effects.push(Object.assign(effect, { sourceId: source.instanceId, hitIndex: event.hitIndex,
+            outcomeAtMs: event.timestampMs }));
         }
         if (target && ['damage', 'heal', 'shield'].includes(event.type)) {
           addCombatText(texts, event, target);
@@ -271,10 +273,19 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       }
       visualClock = advancePresentationClock(visualClock, playDt, p.isPaused);
       advanceSpriteEffects(effects, playDt);
-      for (const effect of effects) if (effect.timeline && effect.startedAtMs !== undefined && sim) {
-        effect.age = Math.max(0, sim.getElapsedMs() - effect.startedAtMs + accumulator) / 1000;
-        const recipient = sim.getUnits().find(unit => unit.instanceId === effect.targetId);
-        if (recipient) effect.target = { x: recipient.x, y: recipient.y };
+      for (const effect of effects) if (sim) {
+        const metadata = effect as SpriteEffect & { sourceId?: string; outcomeAtMs?: number };
+        if (effect.timeline && effect.startedAtMs !== undefined) {
+          effect.age = Math.max(0, sim.getElapsedMs() - effect.startedAtMs + accumulator) / 1000;
+          const caster = effect.sourceHeroId === 'belinda' && sim.getUnits().find(unit => unit.instanceId === metadata.sourceId);
+          if (caster) effect.source = { x: caster.x, y: caster.y };
+        } else if (effect.sourceHeroId === 'belinda' && metadata.outcomeAtMs !== undefined) {
+          effect.age = Math.max(0, sim.getElapsedMs() + accumulator - metadata.outcomeAtMs) / 1000;
+        }
+        if (effect.timeline || effect.sourceHeroId === 'belinda') {
+          const recipient = sim.getUnits().find(unit => unit.instanceId === effect.targetId);
+          if (recipient) effect.target = { x: recipient.x, y: recipient.y };
+        }
       }
       impactShake = Math.max(0, impactShake - playDt);
       drawFloor(); hitAreas = []; drawn3D = [];
@@ -289,8 +300,20 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         ctx.translate(Math.sin(visualClock * 40) * strength, Math.cos(visualClock * 47) * strength * 0.5);
       }
       const units = sim?.getUnits() || [];
+      const spellDrawn = new Map<number, string>();
       drawSpriteBattleLayers(units, effects, !!reduceMotion(), unit => drawUnit(unit, playDt),
-        (batch, layer) => drawSpriteEffects(ctx, batch, width, height, !!reduceMotion(), layer, p.graphicsPreset === 'LOW'));
+        (batch, layer) => {
+          const handled = belinda3d.drawSpells(ctx, batch, layer, { width, height,
+            reducedMotion: !!reduceMotion(), low: p.graphicsPreset === 'LOW' });
+          handled.forEach(id => spellDrawn.set(id, layer));
+          drawSpriteEffects(ctx, spellEffectsForFallback(batch, handled), width, height,
+            !!reduceMotion(), layer, p.graphicsPreset === 'LOW');
+        });
+      canvas.dataset.belindaSpells = JSON.stringify(effects.filter(effect => effect.sourceHeroId === 'belinda').map(effect => ({
+        id: effect.id, castId: effect.castId, kind: effect.kind, slot: effect.skillSlot,
+        targetId: effect.targetId, age: effect.age, rendered3d: spellDrawn.has(effect.id),
+        hitIndex: (effect as SpriteEffect & { hitIndex?: number }).hitIndex,
+      })));
       // Bars remain readable above all bodies and spell layers.
       units.forEach(unit => drawUnit(unit, 0, true));
       ctx.restore();
