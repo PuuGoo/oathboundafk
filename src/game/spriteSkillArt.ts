@@ -794,6 +794,24 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
             }
             ctx.restore(); break;
           }
+          if (art.motif === 'prism') {
+            // Eluard's open facets descend without replaying an opaque column over the victim.
+            const count = lowQuality ? 2 : 3, h = radius * 0.34;
+            const w = radius * (0.2 - travel * 0.07);
+            ctx.save(); ctx.translate(bx, by);
+            for (let i = 0; i < count; i++) {
+              const offset = i - (count - 1) / 2;
+              ctx.save(); ctx.translate(offset * radius * 0.42 * (1 - travel * 0.3),
+                -radius * (1.9 * (1 - travel) + Math.abs(offset) * 0.12));
+              ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+              path([[0, -h], [w, 0], [0, h], [-w, 0]], true);
+              ctx.strokeStyle = art.accent;
+              path([[0, -h], [0, h]]);
+              path([[-w, 0], [w, 0]]);
+              ctx.restore();
+            }
+            ctx.restore(); break;
+          }
           const y = by - radius * 2.3 * (1 - travel);
           ctx.lineWidth = (effect.ultimate ? 4 : 2) * scale;
           path([[bx, y - radius * 0.5], [bx, y]]);
