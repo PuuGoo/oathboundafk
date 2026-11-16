@@ -1051,6 +1051,52 @@ test('actual Morrow ultimate descends with transparent opening eyes at its real 
   }
 });
 
+test('actual Hendrik ultimate drops outlined bastion faces on an enemy while preserving its separate self ward', () => {
+  const initial = createInitialData(), heroId = 'iron_bastion';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.castId === cast.castId && e.sourceId === source.instanceId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const ward = entries.find(e => e.castId === cast.castId && e.sourceId === source.instanceId && e.targetId === source.instanceId && e.type === 'shield')!;
+  assert.ok(ward && ward.value! > 0);
+  assert.equal(createSpriteEffect(ward, source, source)!.support, true);
+  const effect = createSpriteEffect(cast, source, target)!;
+  assert.equal(effect.support, false);
+  for (const low of [false, true]) {
+    let previousY = -Infinity;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, count = low ? 2 : 3;
+      const b = projectSpritePosition(target.x, target.y, 390, 530), moves = calls.filter(c => c[0] === 'translate');
+      assert.deepEqual(moves[0], ['translate', b.x, b.y - 48 * scale]);
+      assert.equal(moves.length, count + 1);
+      const y = Number(moves[1][2]); assert.ok(y > previousY && y < 0); previousY = y;
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'createRadialGradient'].includes(String(c[0]))), false);
+      assert.equal(calls.filter(c => c[0] === 'closePath').length, count, 'only transparent shield outlines close');
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 3, 'each face keeps a chevron and central rib on LOW');
+      for (const t of moves.slice(1)) {
+        assert.ok(Math.abs(Number(t[1])) <= radius * 0.6);
+        assert.ok(Number(t[2]) >= -radius * 2.2 && Number(t[2]) < 0);
+      }
+      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+        assert.ok(Math.abs(Number(c[1])) <= radius * 0.4 && Math.abs(Number(c[2])) <= radius * 0.4);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Fawkes ultimate release converges outlined coffin seals without generic orbit diamonds', () => {
   const initial = createInitialData(), heroId = 'fawkes';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;

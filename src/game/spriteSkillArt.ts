@@ -776,6 +776,24 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
             }
             ctx.restore(); break;
           }
+          if (art.motif === 'bastion') {
+            // Hendrik's attack descends on the opponent; his real self ward is a separate outcome.
+            const count = lowQuality ? 2 : 3, size = radius * 0.32;
+            ctx.save(); ctx.translate(bx, by);
+            for (let i = 0; i < count; i++) {
+              const offset = i - (count - 1) / 2;
+              ctx.save(); ctx.translate(offset * radius * 0.42 * (1 - travel * 0.25),
+                -radius * (1.9 * (1 - travel) + Math.abs(offset) * 0.12));
+              ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+              path([[-size * 0.65, -size * 0.65], [0, -size], [size * 0.65, -size * 0.65],
+                [size * 0.5, size * 0.45], [0, size], [-size * 0.5, size * 0.45]], true);
+              ctx.strokeStyle = art.accent;
+              path([[-size * 0.35, 0], [0, -size * 0.3], [size * 0.35, 0]]);
+              path([[0, -size * 0.3], [0, size * 0.55]]);
+              ctx.restore();
+            }
+            ctx.restore(); break;
+          }
           const y = by - radius * 2.3 * (1 - travel);
           ctx.lineWidth = (effect.ultimate ? 4 : 2) * scale;
           path([[bx, y - radius * 0.5], [bx, y]]);
