@@ -588,7 +588,13 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.quadraticCurveTo(0, -opening * 2, size, 0);
           ctx.quadraticCurveTo(0, opening * 2, -size, 0); ctx.stroke();
           ctx.strokeStyle = art.accent;
-          ring(0, 0, opening * 0.48);
+          if (effect.sourceHeroId === 'morrow' && effect.ultimate) {
+            path([[0, -opening * 0.65], [0, opening * 0.65]]);
+            for (const side of [-1, 1]) {
+              ctx.beginPath(); ctx.moveTo(-size * 0.75, side * opening * 0.75);
+              ctx.quadraticCurveTo(0, side * opening * 2.6, size * 0.75, side * opening * 0.75); ctx.stroke();
+            }
+          } else ring(0, 0, opening * 0.48);
         } else if (art.motif === 'embers') {
           ctx.beginPath(); ctx.moveTo(0, size * 0.8);
           ctx.quadraticCurveTo(-size * 0.9, size * 0.3, -size * 0.35, -size * 0.45);

@@ -1383,6 +1383,31 @@ test('actual Morrow ultimate descends with transparent opening eyes at its real 
       assert.deepEqual(effect, before);
     }
   }
+  for (const low of [false, true]) {
+    let previousOpening = 0;
+    for (const phase of [0.08, 0.14]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
+      const size = radius * (0.24 + phase / 0.36 * 0.24), opening = size * (0.15 + phase / 0.36 * 0.35);
+      const a = projectSpritePosition(source.x, source.y, 390, 530);
+      assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x, a.y - 53 * scale]]);
+      assert.ok(opening > previousOpening); previousOpening = opening;
+      assert.equal(calls.filter(c => c[0] === 'quadraticCurveTo').length, 4, 'eye contour and two separate raised lids');
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, 4, 'eye outline, slit pupil and two lid accents');
+      assert.ok(calls.some(c => c[0] === 'moveTo' && c[1] === 0 && c[2] === -opening * 0.65));
+      assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === 0 && c[2] === opening * 0.65), 'vertical Eye of Evil pupil');
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'closePath', 'createRadialGradient'].includes(String(c[0]))), false);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo', 'quadraticCurveTo'].includes(String(c[0]))))
+        for (const n of c.slice(1)) assert.ok(Number.isFinite(n) && Math.abs(Number(n)) <= radius * 0.5);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
 });
 
 test('actual Hendrik ultimate drops outlined bastion faces on an enemy while preserving its separate self ward', () => {
