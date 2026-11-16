@@ -591,6 +591,19 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.fillStyle = art.accent;
           path([[size, 0], [size * 0.35, -size * 0.2], [size * 0.5, 0], [size * 0.35, size * 0.2]], true, true);
           ctx.restore();
+        } else if (art.motif === 'crossfire' && effect.sourceHeroId === 'walker' && effect.ultimate) {
+          const bearing = Math.atan2(by - ay, bx - ax), gap = radius * (0.22 - charge * 0.08);
+          for (const side of [-1, 1]) {
+            ctx.save(); ctx.translate(-Math.sin(bearing) * gap * side, Math.cos(bearing) * gap * side);
+            ctx.rotate(bearing); ctx.strokeStyle = art.primary;
+            // Readied barrel and grip, not a premature projectile or muzzle flash.
+            path([[-radius * 0.22, -radius * 0.06], [radius * 0.22, -radius * 0.06],
+              [radius * 0.22, radius * 0.04], [-radius * 0.04, radius * 0.04],
+              [-radius * 0.09, radius * 0.18], [-radius * 0.2, radius * 0.18]], true);
+            ctx.strokeStyle = art.accent;
+            path([[-radius * 0.1, -radius * 0.01], [radius * 0.15, -radius * 0.01]]);
+            ctx.restore();
+          }
         } else if (art.motif === 'arrows' && effect.sourceHeroId === 'gwyneth' && effect.ultimate) {
           const bearing = Math.atan2(by - ay, bx - ax), count = lowQuality ? 3 : 5;
           // A transparent drawn bow frames the coming volley without masking the sprite.

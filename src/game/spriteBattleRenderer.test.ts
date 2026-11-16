@@ -1685,6 +1685,36 @@ test('actual Walker ultimate delivers a narrow bullet fan along its real opponen
     assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
     assert.deepEqual(effect, before);
   }
+  for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.08, 0.14]) {
+    const effect = structuredClone(actual);
+    if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
+    effect.age = effect.duration * phase;
+    const before = structuredClone(effect), calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+      calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+    }, set: () => true }) as CanvasRenderingContext2D;
+    drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+    const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
+    const a = projectSpritePosition(effect.source.x, effect.source.y, 390, 530), b = projectSpritePosition(effect.target.x, effect.target.y, 390, 530);
+    a.y -= 53 * scale; b.y -= 48 * scale;
+    const bearing = Math.atan2(b.y - a.y, b.x - a.x), gap = radius * (0.22 - phase / 0.36 * 0.08);
+    const moves = calls.filter(c => c[0] === 'translate'); assert.equal(moves.length, 3, 'caster and two readied pistols');
+    assert.deepEqual(moves[0], ['translate', a.x, a.y]);
+    for (const [i, side] of [-1, 1].entries()) {
+      assert.ok(Math.abs(Number(moves[i + 1][1]) + Math.sin(bearing) * gap * side) < 1e-8);
+      assert.ok(Math.abs(Number(moves[i + 1][2]) - Math.cos(bearing) * gap * side) < 1e-8);
+    }
+    const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 2);
+    rotations.forEach(c => assert.ok(Math.abs(Number(c[1]) - bearing) < 1e-8));
+    assert.equal(calls.filter(c => c[0] === 'closePath').length, 2, 'two outlined barrel-and-grip profiles');
+    assert.equal(calls.filter(c => c[0] === 'stroke').length, 4, 'two pistol profiles and two barrel insets');
+    assert.equal(calls.some(c => ['fill', 'ellipse', 'arc', 'quadraticCurveTo', 'createRadialGradient'].includes(String(c[0]))), false, 'preparation has no fired bullets or flash');
+    assert.equal(calls.filter(c => c[0] === 'lineTo' && c[1] === -radius * 0.2 && c[2] === radius * 0.18).length, 2, 'both guns retain a readable grip');
+    for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+      assert.ok(Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.28);
+    assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+    assert.deepEqual(effect, before);
+  }
 });
 
 test('actual Gwyneth ultimate fans short fletched arrows across the real opponent bearing', () => {
