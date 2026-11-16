@@ -1,0 +1,56 @@
+{
+  "id": "lucius",
+  "heroId": "celestial_guardian",
+  "name": "Lucius",
+  "family": "bloom",
+  "source": "assets-source/vfx/lucius/lucius.blend",
+  "asset": "lucius.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Gi\u00e1p ng\u00e0, c\u1ed9t s\u00e1ng xanh thi\u00ean v\u00e0 c\u00e1nh hoa quang minh quanh khi\u00ean m\u1eb7t tr\u1eddi.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 66
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 66
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 66
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 66
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 305924,
+    "glbSha256": "9c4663a60f1b9a401dcc14bb07a046a8bf8c6ca647993eb117806f8cc15b32c6",
+    "generatorSha256": "a1d6778df7cf6e0117df056905e8cca7a6f27c1a266babfd387fb30b4db4c1d4",
+    "specSha256": "0027d3bd252c8d8bb267ed7e6a167a82c765db4247ba4a3ad23b4fa72a186f23",
+    "objects": 23,
+    "vertices": 568,
+    "triangles": 1044,
+    "meshes": 23,
+    "materials": 3
+  }
+}

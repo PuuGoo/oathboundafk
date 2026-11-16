@@ -24,10 +24,14 @@ const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
   '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`, 'about:blank',
 ], { stdio: 'ignore' });
 
-// Nhóm mở đầu chứa mọi hero đang bật hiệu ứng 3D.
+// Nhóm mở đầu chứa hero cần kiểm; mặc định là các hero đang bật hiệu ứng 3D.
 const enabled = new Set(HERO_VFX_DEFINITIONS.map(definition => definition.heroId));
-const group = OATHBOUND_HEROES.map(hero => hero.heroId).filter(id => enabled.has(id)).slice(0, 5);
+const heroes = new Map(OATHBOUND_HEROES.map(hero => [hero.heroId, hero]));
+const requested = (process.argv.find(arg => arg.startsWith('--heroes=')) || '').slice(9).split(',').filter(Boolean);
+const group = requested.length ? [...requested]
+  : OATHBOUND_HEROES.map(hero => hero.heroId).filter(id => enabled.has(id)).slice(0, 5);
 for (const hero of OATHBOUND_HEROES) { if (group.length >= 5) break; if (!group.includes(hero.heroId)) group.push(hero.heroId); }
+for (const heroId of requested) assert.ok(heroes.has(heroId), `unknown hero in --heroes: ${heroId}`);
 const result = { mode: prefix, group, errors: [], failedAssets: [], hashes: {}, seen: {}, models: {}, pauseStable: null, speed2: null };
 
 let ws;
@@ -84,7 +88,9 @@ try {
   await call('Page.enable'); await call('Runtime.enable'); await call('Network.enable');
   await call('Emulation.setDeviceMetricsOverride', { width: 1100, height: 880, deviceScaleFactor: 1, mobile: false });
   // Artifact thật của build phải khớp hash, gồm cả GLB hiệu ứng.
-  const served = ['dist/index.html', 'public/assets/vfx/belinda.glb'];
+  const served = ['dist/index.html',
+    ...HERO_VFX_DEFINITIONS.filter(definition => group.includes(definition.heroId))
+      .map(definition => 'public' + definition.url)];
   for (const file of served) {
     const expected = hash(fs.readFileSync(path.join(root, file)));
     const response = await fetch(origin + '/' + file.replace(/^dist\//, '').replace(/^public\//, ''));
