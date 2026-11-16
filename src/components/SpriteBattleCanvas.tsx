@@ -19,6 +19,7 @@ import { isUnitAvailable } from '../game/types';
 import { soundEngine } from '../game/audio';
 import { createHero3D } from '../game/hero3d';
 import { spellEffectsForFallback } from '../game/belindaSpell3d';
+import { getHeroVfx } from '../game/heroVfx';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -314,6 +315,15 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         targetId: effect.targetId, age: effect.age, rendered3d: spellDrawn.has(effect.id),
         hitIndex: (effect as SpriteEffect & { hitIndex?: number }).hitIndex,
       })));
+      // Read-only diagnostics for the Blender effect assets; no input can trigger a cast here.
+      const vfxDrawn = new Set(heroes3d.vfxDrawnIds());
+      canvas.dataset.heroVfx = JSON.stringify({
+        models: Object.fromEntries(heroes3d.vfxModelStatuses().map(model => [model.heroId, model.status])),
+        effects: effects.filter(effect => getHeroVfx(effect.sourceHeroId)).map(effect => ({
+          id: effect.id, heroId: effect.sourceHeroId, kind: effect.kind, slot: effect.skillSlot,
+          age: +effect.age.toFixed(3), rendered3d: vfxDrawn.has(effect.id),
+        })),
+      });
       // Bars remain readable above all bodies and spell layers.
       units.forEach(unit => drawUnit(unit, 0, true));
       ctx.restore();

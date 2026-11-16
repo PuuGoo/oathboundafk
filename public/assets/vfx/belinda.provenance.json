@@ -1,0 +1,56 @@
+{
+  "id": "belinda",
+  "heroId": "belinda",
+  "name": "Belinda",
+  "family": "sigil",
+  "source": "assets-source/vfx/belinda/belinda.blend",
+  "asset": "belinda.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Golden astral sigil, orbiting rings and star motes for holy arcane casts.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 62
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 62
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 62
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 62
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 323472,
+    "glbSha256": "065a62551a97bb9d2367e714af1f47625046accbb5d4088c1488e457ec909efc",
+    "generatorSha256": "0f66a0e18df62fdf3399b068f64433d75d54689019faea6279c370242dc329a6",
+    "specSha256": "ca34f02eb73479c74d1efe25acaea9f7d4c720126b80c17c50f501791f85f7be",
+    "objects": 23,
+    "vertices": 1372,
+    "triangles": 2664,
+    "meshes": 23,
+    "materials": 4
+  }
+}

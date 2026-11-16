@@ -5,6 +5,8 @@ import type { SpriteActor } from './spriteBattleRenderer';
 import type { SpriteEffect } from './spriteBattleEffects';
 import { createBelindaSpellScene, type BelindaSpellFrame } from './belindaSpell3d';
 import { getHeroModel, HERO_MODEL_DEFINITIONS } from './heroModels';
+import { createHeroVfxScene, type HeroVfxFrame, type LoadedVfx } from './heroVfx3d';
+import { getHeroVfx, HERO_VFX_DEFINITIONS } from './heroVfx';
 
 export type HeroClip = 'idle' | 'run' | 'basic' | 'active' | 'ultimate' | 'hit' | 'death';
 export type HeroModelStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -73,14 +75,20 @@ export interface HeroRenderBackend {
   /** Returns false when this hero is unavailable; Canvas2D remains responsible for fallback. */
   draw(ctx: CanvasRenderingContext2D, unit: BattleUnitRuntime, actor: SpriteActor, elapsedMs: number,
     reducedMotion: boolean, x: number, y: number, scale: number): boolean;
-  /** Belinda-only spell pass. The backend must return no IDs until Belinda is ready. */
+  /** Effect pass: Blender GLBs first, then Belinda's legacy procedural spell scene. */
   drawSpells?(ctx: CanvasRenderingContext2D, effects: readonly SpriteEffect[], layer: 'ground' | 'front',
     frame: Omit<BelindaSpellFrame, 'staffAnchors'>): Set<number>;
+  /** Clears the per-frame Blender-effect id set; the caller owns frame order. */
+  beginFrame?(): void;
+  /** Ids the committed GLB effects actually drew in this frame, never Canvas2D art. */
+  vfxDrawnIds?(): readonly number[];
   /** Releases all per-battle skeletons and cached models; retains the one shared renderer. */
   reset(): void;
   /** Releases all GPU resources. Safe to call exactly once or repeatedly. */
   dispose(): void;
   modelStatus?(heroId: string): HeroModelStatus;
+  /** Blender effect-asset status per hero; separate from the body-model status. */
+  vfxStatus?(heroId: string): string;
 }
 
 export interface HeroModelDiagnostic { heroId: string; status: HeroModelStatus }
@@ -94,6 +102,8 @@ type LoadedGltf = { scene: Three.Object3D; animations: Three.AnimationClip[] };
 export interface HeroBackendDependencies {
   renderer: Three.WebGLRenderer;
   loadModel: (url: string) => Promise<LoadedGltf>;
+  /** Optional override for Blender effect GLBs so body-model tests stay isolated. */
+  loadVfx?: (url: string) => Promise<LoadedVfx>;
 }
 type ThreeNamespace = typeof import('three');
 type ModelRecord = {
@@ -159,6 +169,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
   const instances = new Map<string, HeroInstance>();
   const staffAnchors = new Map<string, { x: number; y: number }>();
   const spells = createBelindaSpellScene(THREE);
+  const vfx = createHeroVfxScene(THREE, { loadModel: dependencies?.loadVfx });
   let queueBusy = false;
   let generation = 0;
   let disposed = false;
@@ -216,13 +227,30 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
     record.state = 'loading'; record.loadGeneration = generation; queue.push(heroId); pump();
   };
   const status = (heroId: string): HeroModelStatus => disposed ? 'failed' : records.get(heroId)?.state || 'failed';
+  const vfxHandled = new Set<number>();
 
   return {
     modelStatus: status,
+    vfxStatus: (heroId: string): string => {
+      if (disposed) return 'failed';
+      const definition = getHeroVfx(heroId);
+      return definition ? vfx.status(definition.sourceId) : 'disabled';
+    },
+    beginFrame() { vfxHandled.clear(); },
+    vfxDrawnIds() { return [...vfxHandled]; },
     drawSpells(ctx: CanvasRenderingContext2D, effects: readonly SpriteEffect[], layer: 'ground' | 'front', frame: Omit<BelindaSpellFrame, 'staffAnchors'>) {
       const handled = new Set<number>();
-      if (disposed || spellFailed || status('belinda') !== 'ready') return handled;
+      if (disposed) return handled;
+      // Blender effect GLBs draw first; whatever they cannot handle keeps its Canvas2D art.
+      try {
+        const frameWithAnchors: HeroVfxFrame = { ...frame, staffAnchors };
+        for (const id of vfx.draw(renderer, ctx, effects, layer, frameWithAnchors)) {
+          handled.add(id); vfxHandled.add(id);
+        }
+      } catch { /* Canvas2D effects remain the fallback for a broken VFX asset. */ }
+      if (spellFailed || status('belinda') !== 'ready') return handled;
       for (const effect of effects) {
+        if (handled.has(effect.id)) continue;
         try {
           if (spells.draw(renderer, ctx, effect, layer, { ...frame, staffAnchors })) handled.add(effect.id);
         } catch { spellFailed = true; break; }
@@ -286,6 +314,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       if (disposed) return;
       generation++;
       resetInstances();
+      vfx.reset();
       queue.splice(0).forEach(heroId => { const record = records.get(heroId); if (record && !record.inFlight) record.state = 'idle'; });
       for (const record of records.values()) {
         if (record.state === 'ready') { disposeTemplate(record); record.state = 'idle'; }
@@ -295,7 +324,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       if (disposed) return;
       disposed = true; generation++; queue.length = 0; resetInstances();
       for (const record of records.values()) { if (record.state === 'ready') disposeTemplate(record); }
-      spells.dispose(); renderer.dispose(); renderer.forceContextLoss();
+      vfx.dispose(); spells.dispose(); renderer.dispose(); renderer.forceContextLoss();
     },
   };
 }
@@ -310,7 +339,10 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
     const old = backend; backend = undefined;
     try { old?.dispose(); } catch { /* Canvas2D fallback remains available. */ }
   };
-  const beginFrame = () => renderedIds.clear();
+  const beginFrame = () => {
+    renderedIds.clear();
+    try { backend?.beginFrame?.(); } catch { /* Canvas2D fallback remains available. */ }
+  };
   const modelStatus = (heroId: string): HeroModelStatus => {
     if (state === 'disposed' || state === 'failed') return 'failed';
     if (backend?.modelStatus) return backend.modelStatus(heroId);
@@ -318,10 +350,27 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
     return 'idle';
   };
   const modelStatuses = (): HeroModelDiagnostic[] => HERO_MODEL_DEFINITIONS.map(model => ({ heroId: model.heroId, status: modelStatus(model.heroId) }));
+  const vfxModelStatus = (heroId: string): HeroModelStatus => {
+    if (state === 'disposed' || state === 'failed') return 'failed';
+    if (!getHeroVfx(heroId)) return 'idle';
+    if (backend?.vfxStatus) {
+      const status = backend.vfxStatus(heroId);
+      return status === 'ready' || status === 'loading' || status === 'failed' ? status : 'idle';
+    }
+    return 'idle';
+  };
+  const vfxModelStatuses = (): HeroModelDiagnostic[] => HERO_VFX_DEFINITIONS.map(definition => ({
+    heroId: definition.heroId, status: vfxModelStatus(definition.heroId),
+  }));
   return {
     status: () => state,
     modelStatus,
     modelStatuses,
+    vfxModelStatus,
+    vfxModelStatuses,
+    vfxDrawnIds: (): readonly number[] => {
+      try { return backend?.vfxDrawnIds?.() || []; } catch { return []; }
+    },
     beginFrame,
     diagnostics(): Hero3DDiagnostic { return { status: state, heroes: modelStatuses(), renderedIds: [...renderedIds] }; },
     draw(...args: Parameters<HeroRenderBackend['draw']>): boolean {
@@ -344,7 +393,7 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
     },
     drawSpells(ctx: CanvasRenderingContext2D, effects: readonly SpriteEffect[], layer: 'ground' | 'front',
       frame: Omit<BelindaSpellFrame, 'staffAnchors'>): Set<number> {
-      if (state !== 'ready' || modelStatus('belinda') !== 'ready' || !backend?.drawSpells) return new Set();
+      if (state !== 'ready' || !backend?.drawSpells) return new Set();
       try { return backend.drawSpells(ctx, effects, layer, frame); }
       catch { state = 'failed'; release(); return new Set(); }
     },
