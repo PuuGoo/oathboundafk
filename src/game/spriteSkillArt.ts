@@ -527,10 +527,25 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           }
         }
       } else if (art.motif === 'vortex') {
-        for (let i = 0; i < (lowQuality ? 2 : 3); i++) {
-          const angle = -charge * Math.PI + i * Math.PI * 2 / 3;
-          ctx.strokeStyle = i % 2 ? art.accent : art.primary;
-          ctx.beginPath(); ctx.arc(0, 0, radius * (0.2 + i * 0.1), angle, angle + Math.PI * 1.25); ctx.stroke();
+        if (effect.sourceHeroId === 'scarlet' && effect.ultimate) {
+          const count = lowQuality ? 2 : 3, reach = radius * (0.44 - charge * 0.12);
+          for (let i = 0; i < count; i++) {
+            ctx.save(); ctx.rotate(i * Math.PI * 2 / count - charge * 0.5);
+            ctx.strokeStyle = art.primary;
+            ctx.beginPath(); ctx.moveTo(-reach, -reach * 0.25);
+            ctx.quadraticCurveTo(-reach * 0.35, -reach * 0.9, reach * 0.22, -reach * 0.25);
+            ctx.quadraticCurveTo(reach * 0.52, reach * 0.35, 0, reach * 0.12); ctx.stroke();
+            ctx.strokeStyle = art.accent;
+            ctx.beginPath(); ctx.moveTo(-reach * 0.65, -reach * 0.2);
+            ctx.quadraticCurveTo(-reach * 0.1, -reach * 0.5, reach * 0.1, -reach * 0.1); ctx.stroke();
+            ctx.restore();
+          }
+        } else {
+          for (let i = 0; i < (lowQuality ? 2 : 3); i++) {
+            const angle = -charge * Math.PI + i * Math.PI * 2 / 3;
+            ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+            ctx.beginPath(); ctx.arc(0, 0, radius * (0.2 + i * 0.1), angle, angle + Math.PI * 1.25); ctx.stroke();
+          }
         }
       } else if (art.motif === 'aegis') {
         const size = radius * (0.24 + charge * 0.24);
