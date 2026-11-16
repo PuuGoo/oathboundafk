@@ -740,28 +740,40 @@ test('actual coffin eye flame and bastion active anticipation has a caster-local
     assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId &&
       ['damage', 'crowd_control', 'knockback'].includes(event.type)), 'anchor is a real affected enemy');
     const effect = createSpriteEffect(cast, source, target)!;
-    effect.age = effect.duration * 0.12;
+    for (const phase of [0.08, 0.14]) {
+    effect.age = effect.duration * phase;
     const before = structuredClone(effect);
-    for (const [reduced, low] of [[false, false], [false, true], [true, true]]) {
+    for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
       }, set: () => true }) as CanvasRenderingContext2D;
       drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
       assert.equal(calls.some(call => call[0] === 'rotate'), false, `${heroId}: no shared spinning wheel`);
+      assert.equal(calls.some(call => call[0] === 'fill' || call[0] === 'createRadialGradient'), false,
+        `${heroId}: own outlined charge stays visible without a shared filled body halo`);
       if (!reduced) {
         const a = projectSpritePosition(source.x, source.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
         assert.ok(calls.some(call => call[0] === 'translate' && call[1] === a.x && call[2] === a.y - 53 * scale));
         if (heroId === 'morrow' || heroId === 'hero_68_rigby') {
-          assert.ok(calls.filter(call => call[0] === 'quadraticCurveTo').length >= 2, 'curved eye or flame signature survives LOW');
+          assert.equal(calls.filter(call => call[0] === 'quadraticCurveTo').length, heroId === 'morrow' ? 2 : 4,
+            'curved eye or flame signature survives LOW');
+          assert.equal(calls.filter(call => call[0] === 'arc').length, heroId === 'morrow' ? 1 : 0,
+            'only the small eye pupil is circular');
         } else {
           assert.equal(calls.filter(call => call[0] === 'closePath').length, 1, 'one outlined coffin or shield, no diamond cloud');
+          assert.equal(calls.some(call => call[0] === 'arc'), false);
+        }
+        const size = 43 * scale * (0.24 + phase / 0.36 * 0.24);
+        for (const call of calls.filter(call => ['moveTo', 'lineTo', 'quadraticCurveTo'].includes(String(call[0])))) {
+          for (const value of call.slice(1)) assert.ok(Math.abs(Number(value)) <= size + 1e-9, 'compact caster-local charge');
         }
       }
       assert.ok(calls.some(call => call[0] === 'stroke'), 'static reduced feedback retained');
       assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
       for (const call of calls) for (const value of call.slice(1)) if (typeof value === 'number') assert.ok(Number.isFinite(value));
       assert.deepEqual(effect, before);
+    }
     }
   }
 });
