@@ -316,12 +316,14 @@ def build_sigil():
 
 def build_strike():
     """Chém: ba lưỡi liềm quét qua mục tiêu, mảnh vụn và tia chớp va chạm."""
-    for i in range(3):
-        crescent(f'Crescent {i + 1}', .86 + i * .12, .16,
+    # Số lưỡi liềm và bán kính lấy từ seed của tướng: hai tướng cùng họ vẫn khác tay.
+    blades = 2 + RNG.randint(0, 2)
+    for i in range(blades):
+        crescent(f'Crescent {i + 1}', (.78 + i * .13) * (.92 + RNG.random() * .2), .14 + RNG.random() * .06,
                  'vfx_core' if i % 2 == 0 else 'vfx_glow', phase=-.7 + i * .12,
                  spread=.2, tilt=-.25 + i * .18, reach=.25, delay=i * .04)
-    torus('Impact ring', .5, .012, 'vfx_alt', tilt=1.3, twist=1.4, delay=.05)
-    spikes(10, .8, .34, 'vfx_glow', size=.035, delay=.06)
+    torus('Impact ring', .45 + RNG.random() * .2, .012, 'vfx_alt', tilt=1.3, twist=1.4, delay=.05)
+    spikes(8 + RNG.randint(0, 4), .8, .34, 'vfx_glow', size=.035, delay=.06)
     ico('Edge flare', .1, 'vfx_core', role='core', base=(.35, 0, .1))
 
 
@@ -329,43 +331,48 @@ def build_lance():
     """Thương/giáo: mũi lao dài, dải xoắn quanh trục và vòng nổ ở điểm chạm."""
     cone('Lance shaft', .05, .012, 1.5, 'vfx_core', role='beam', base=(0, 0, .1),
          reach=1.5, twist=.4)
-    cone('Lance tip', .11, 0.0, .34, 'vfx_glow', role='beam', base=(0, 0, .92),
+    cone('Lance tip', .11, 0.0, .34 + RNG.random() * .2, 'vfx_glow', role='beam', base=(0, 0, .92),
          reach=1.7, twist=.4, delay=.02)
-    for i in range(3):
-        torus(f'Spiral {i + 1}', .2, .009, 'vfx_alt', role='orbit', spread=.16,
+    for i in range(2 + RNG.randint(0, 2)):
+        torus(f'Spiral {i + 1}', .18 + RNG.random() * .08, .009, 'vfx_alt', role='orbit', spread=.16,
               tilt=.2, phase=i / 3 * TAU, twist=2.4)
-    rings(2, [.42, .6], [1.24, 1.34], ['vfx_glow', 'vfx_alt'], minor=.012, delay=.08)
-    spikes(8, .7, .3, 'vfx_glow', size=.03, delay=.1)
+    rings(1 + RNG.randint(0, 2), [.42 + RNG.random() * .1, .6], [1.24, 1.34],
+          ['vfx_glow', 'vfx_alt'], minor=.012, delay=.08)
+    spikes(6 + RNG.randint(0, 4), .7, .3, 'vfx_glow', size=.03, delay=.1)
 
 
 def build_volley():
     """Loạt tên: nhiều mũi bay theo vòng cung, có vệt và vòng va chạm."""
-    for i in range(5):
+    arrows = 4 + RNG.randint(0, 3)
+    for i in range(arrows):
         cone(f'Arrow {i + 1}', .045, 0.0, .5, 'vfx_core', role='spike',
-             phase=-.9 + i * .45, spread=.55 + i * .05, delay=i * .03)
+             phase=-.9 + i * .45, spread=.5 + i * .06 + RNG.random() * .1, delay=i * .03)
         box(f'Arrow trail {i + 1}', (.012, .012, .3), 'vfx_alt', role='spoke',
-            phase=-.9 + i * .45, spread=.7, delay=i * .03)
-    rings(2, [.5, .74], [1.3, 1.18], ['vfx_glow', 'vfx_alt'], minor=.013, delay=.06)
-    motes(6, .8, .04, 'vfx_glow', rise=.4)
+             phase=-.9 + i * .45, spread=.7, delay=i * .03)
+    rings(2, [.5 + RNG.random() * .1, .74], [1.3, 1.18], ['vfx_glow', 'vfx_alt'], minor=.013, delay=.06)
+    motes(5 + RNG.randint(0, 3), .8, .04, 'vfx_glow', rise=.4)
 
 
 def build_bloom():
     """Thánh quang: cánh hoa nở, cột sáng và hạt chữa trị bay lên."""
-    for i in range(8):
+    petals = 6 + RNG.randint(0, 4)
+    for i in range(petals):
         ico(f'Petal {i + 1}', .13, 'vfx_core' if i % 2 else 'vfx_glow', role='orbit',
-            phase=i / 8 * TAU, spread=.62, tilt=.1, twist=.4)
+            phase=i / petals * TAU, spread=.55 + RNG.random() * .18, tilt=.1, twist=.4)
     cone('Pillar', .3, .16, 1.4, 'vfx_halo', role='column', base=(0, 0, .7),
-         reach=1.6, twist=.5)
-    torus('Grace ring', .8, .016, 'vfx_glow', tilt=1.28, twist=1.2)
-    motes(12, .95, .05, 'vfx_core', rise=.7, delay=.08)
+         reach=1.4 + RNG.random() * .5, twist=.5)
+    torus('Grace ring', .7 + RNG.random() * .2, .016, 'vfx_glow', tilt=1.28, twist=1.2)
+    motes(9 + RNG.randint(0, 5), .95, .05, 'vfx_core', rise=.7, delay=.08)
     ico('Heart light', .14, 'vfx_glow', role='core', base=(0, 0, .35))
 
 
 def build_storm():
     """Bão/hắc ám: tia chớp tỏa, cầu lệch tâm và vành xung kích nghiêng."""
-    for i in range(11):
-        cone(f'Bolt {i + 1}', .052, .004, .78, 'vfx_glow', role='spike',
-             phase=i / 11 * TAU + RNG.random() * .3, spread=1.0, delay=.04 + (i % 3) * .03)
+    bolts = 9 + RNG.randint(0, 4)
+    for i in range(bolts):
+        cone(f'Bolt {i + 1}', .052, .004, .72 + RNG.random() * .18, 'vfx_glow', role='spike',
+             phase=i / bolts * TAU + RNG.random() * .3, spread=.9 + RNG.random() * .25,
+             delay=.04 + (i % 3) * .03)
     torus('Shock ring', .84, .026, 'vfx_alt', tilt=1.22, twist=1.8)
     torus('Upper ring', .56, .018, 'vfx_glow', tilt=.9, twist=-2.2, delay=.05)
     torus('Inner ring', .34, .012, 'vfx_core', tilt=.6, twist=2.6, delay=.02)
@@ -380,9 +387,10 @@ def build_gunfire():
          reach=1.8, twist=.2)
     cone('Muzzle flare', .2, 0.0, .5, 'vfx_core', role='lance', axis='X',
          base=(0, 0, .12), reach=1.4, twist=-.3, delay=.01)
-    for i in range(7):
-        cone(f'Tracer {i + 1}', .05, .006, .9, 'vfx_core', role='dart', axis='X',
-             phase=-.5 + i * .16, spread=.5 + i * .06, delay=i * .015, twist=1.4)
+    tracers = 5 + RNG.randint(0, 4)
+    for i in range(tracers):
+        cone(f'Tracer {i + 1}', .05, .006, .85 + RNG.random() * .2, 'vfx_core', role='dart', axis='X',
+             phase=-.5 + i * .16, spread=.45 + i * .06 + RNG.random() * .08, delay=i * .015, twist=1.4)
     rings(2, [.55, .78], [1.32, 1.2], ['vfx_glow', 'vfx_alt'], minor=.016, delay=.04)
     spikes(10, .85, .34, 'vfx_glow', size=.036, delay=.05)
     motes(8, .8, .05, 'vfx_alt', rise=.4, delay=.1)

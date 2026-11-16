@@ -1,0 +1,56 @@
+{
+  "id": "hendrik",
+  "heroId": "iron_bastion",
+  "name": "Hendrik",
+  "family": "strike",
+  "source": "assets-source/vfx/hendrik/hendrik.blend",
+  "asset": "hendrik.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Khi\u00ean n\u1ec7n: l\u01b0\u1ee1i li\u1ec1m th\u00e9p r\u1ed9ng, v\u00f2ng xung k\u00edch xanh th\u00e9p v\u00e0 m\u1ea3nh v\u1ee5n cho h\u1ed9 v\u1ec7 hai khi\u00ean.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 43
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 43
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 43
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 43
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 205416,
+    "glbSha256": "4812aba63b4767f7c0e5230d17202e1f455f57e5f7947f75659b150cd2bff173",
+    "generatorSha256": "0a03999dd366f8e9a31997c15a0dd080aa624e2bea2a0b7afd0f9d71b22b77e1",
+    "specSha256": "4580e78e80836558cb9360572dde71cebe24611ee1bea4aa0a9c7f143235f07a",
+    "objects": 15,
+    "vertices": 529,
+    "triangles": 902,
+    "meshes": 15,
+    "materials": 3
+  }
+}
