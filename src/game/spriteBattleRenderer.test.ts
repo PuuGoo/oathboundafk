@@ -623,6 +623,22 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
         assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === size * 0.38 && c[2] === -size * 0.07), 'long shotgun barrel');
         for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
           assert.ok(Number.isFinite(Number(c[1])) && Number.isFinite(Number(c[2])) && Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.4);
+      } else if (heroId === 'gwyneth' && phase < 0.16) {
+        const translations = calls.filter(c => c[0] === 'translate');
+        assert.equal(translations.length, 2, 'one nocked arrow inside the caster-local bow');
+        assert.deepEqual(translations[0], ['translate', a.x, a.y - 53 * scale]);
+        assert.ok(Math.abs(Number(translations[1][1])) < 1e-10 && Math.abs(Number(translations[1][2])) < 1e-10);
+        const b = projectSpritePosition(target.x, target.y, 390, 530);
+        const bearing = Math.atan2(b.y - a.y + 5 * scale, b.x - a.x), radius = 43 * scale;
+        const rotations = calls.filter(c => c[0] === 'rotate');
+        assert.equal(rotations.length, 2, 'bow and single arrow both face the real opponent');
+        rotations.forEach(c => assert.ok(Math.abs(Number(c[1]) - bearing) < 1e-8));
+        assert.deepEqual(calls.filter(c => c[0] === 'quadraticCurveTo'), [['quadraticCurveTo', radius * 0.28, 0, 0, radius * 0.3]], 'open bow limb');
+        assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === -radius * (0.08 + phase / 0.36 * 0.14) && c[2] === 0), 'string pulls back during preparation');
+        assert.equal(calls.filter(c => c[0] === 'fill').length, 1, 'one arrowhead, never ultimate volley');
+        assert.equal(calls.filter(c => c[0] === 'stroke').length, 4, 'bow limb, string, arrow shaft and fletching');
+        for (const c of calls.filter(c => ['moveTo', 'lineTo', 'quadraticCurveTo'].includes(String(c[0]))))
+          for (const value of c.slice(1)) assert.ok(Number.isFinite(Number(value)) && Math.abs(Number(value)) <= radius * 0.31);
       } else assert.ok(calls.some(c => c[0] === 'fill') && calls.some(c => c[0] === 'stroke'));
       assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
       assert.deepEqual(effect, before);

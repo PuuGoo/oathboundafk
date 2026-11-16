@@ -652,8 +652,8 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.strokeStyle = art.accent;
           path([[0, -size * 0.025], [size * 0.32, -size * 0.025]]);
           path([[size * 0.08, size * 0.045], [size * 0.22, size * 0.045]]);
-        } else if (art.motif === 'arrows' && effect.sourceHeroId === 'gwyneth' && effect.ultimate) {
-          const bearing = Math.atan2(by - ay, bx - ax), count = lowQuality ? 3 : 5;
+        } else if (art.motif === 'arrows' && effect.sourceHeroId === 'gwyneth') {
+          const bearing = Math.atan2(by - ay, bx - ax), count = effect.ultimate ? (lowQuality ? 3 : 5) : 1;
           // A transparent drawn bow frames the coming volley without masking the sprite.
           ctx.save(); ctx.rotate(bearing); ctx.strokeStyle = art.primary;
           ctx.beginPath(); ctx.moveTo(0, -radius * 0.3);
