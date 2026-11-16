@@ -692,14 +692,16 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.restore(); break;
         }
         case 'volley': {
-          if (art.motif === 'daggers') {
-            // Oscar's small knives fan across the flight bearing and close on the real victim.
-            const count = lowQuality ? 2 : 4, bearing = Math.atan2(by - ay, bx - ax);
+          if (art.motif === 'daggers' || art.motif === 'arrows') {
+            // Short knives or fletched arrows fan across the bearing and close on the real victim.
+            const arrows = art.motif === 'arrows';
+            const count = arrows ? lowQuality ? 3 : 5 : lowQuality ? 2 : 4;
+            const bearing = Math.atan2(by - ay, bx - ax);
             for (let i = 0; i < count; i++) {
               const t = Math.max(0, Math.min(1, travel * 1.3 - i * 0.075));
-              const spread = (i - (count - 1) / 2) * radius * 0.18 * Math.sin(t * Math.PI);
+              const spread = (i - (count - 1) / 2) * radius * (arrows ? 0.22 : 0.18) * Math.sin(t * Math.PI);
               weapon(ax + (bx - ax) * t - Math.sin(bearing) * spread,
-                ay + (by - ay) * t + Math.cos(bearing) * spread, radius * 0.16);
+                ay + (by - ay) * t + Math.cos(bearing) * spread, radius * (arrows ? 0.18 : 0.16));
             }
             break;
           }
