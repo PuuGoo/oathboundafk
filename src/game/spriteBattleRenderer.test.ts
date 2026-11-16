@@ -1525,6 +1525,31 @@ test('actual Fawkes ultimate release converges outlined coffin seals without gen
       assert.deepEqual(effect, before);
     }
   }
+  for (const low of [false, true]) {
+    let previousGap = 0;
+    for (const phase of [0.08, 0.14]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
+      const a = projectSpritePosition(source.x, source.y, 390, 530);
+      const moves = calls.filter(c => c[0] === 'translate'); assert.equal(moves.length, 3, 'caster and two opening seal halves');
+      assert.deepEqual(moves[0], ['translate', a.x, a.y - 53 * scale]);
+      const gap = radius * (0.06 + phase / 0.36 * 0.12);
+      assert.ok(gap > previousGap); previousGap = gap;
+      assert.deepEqual(moves.slice(1), [['translate', -gap, 0], ['translate', gap, 0]]);
+      assert.equal(calls.filter(c => c[0] === 'closePath').length, 2, 'separate transparent coffin halves');
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, 6, 'two half contours with two inset seal marks each');
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'quadraticCurveTo', 'createRadialGradient'].includes(String(c[0]))), false);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+        assert.ok(Math.abs(Number(c[1])) <= radius * 0.3 && Math.abs(Number(c[2])) <= radius * 0.45);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
 });
 
 test('actual Lucius active release converges transparent shield faces at the real opponent without magic diamonds', () => {

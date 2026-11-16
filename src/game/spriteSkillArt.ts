@@ -548,12 +548,25 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
         const size = radius * (0.24 + charge * 0.24);
         ctx.strokeStyle = art.primary;
         if (art.motif === 'coffin') {
-          // A small upright seal prepares the later doors at the victim; it never covers their body.
-          path([[-size * 0.32, -size], [size * 0.32, -size], [size * 0.58, -size * 0.55],
-            [size * 0.42, size], [-size * 0.42, size], [-size * 0.58, -size * 0.55]], true);
-          ctx.strokeStyle = art.accent;
-          path([[0, -size * 0.5], [0, size * 0.5]]);
-          path([[-size * 0.2, -size * 0.15], [size * 0.2, -size * 0.15]]);
+          if (effect.sourceHeroId === 'fawkes' && effect.ultimate) {
+            const gap = radius * (0.06 + charge * 0.12);
+            for (const side of [-1, 1]) {
+              ctx.save(); ctx.translate(side * gap, 0); ctx.strokeStyle = art.primary;
+              path([[0, -size], [side * size * 0.3, -size], [side * size * 0.58, -size * 0.55],
+                [side * size * 0.42, size], [0, size]], true);
+              ctx.strokeStyle = art.accent;
+              path([[side * size * 0.12, -size * 0.5], [side * size * 0.12, size * 0.5]]);
+              path([[side * size * 0.04, -size * 0.15], [side * size * 0.28, -size * 0.15]]);
+              ctx.restore();
+            }
+          } else {
+            // A small upright seal prepares the later doors at the victim; it never covers their body.
+            path([[-size * 0.32, -size], [size * 0.32, -size], [size * 0.58, -size * 0.55],
+              [size * 0.42, size], [-size * 0.42, size], [-size * 0.58, -size * 0.55]], true);
+            ctx.strokeStyle = art.accent;
+            path([[0, -size * 0.5], [0, size * 0.5]]);
+            path([[-size * 0.2, -size * 0.15], [size * 0.2, -size * 0.15]]);
+          }
         } else if (art.motif === 'eye') {
           const opening = size * (0.15 + charge * 0.35);
           ctx.beginPath(); ctx.moveTo(-size, 0);
