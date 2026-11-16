@@ -17,8 +17,9 @@ import type { SpriteActor } from '../game/spriteBattleRenderer';
 import type { BattleUnitRuntime, CombatEvent } from '../game/types';
 import { isUnitAvailable } from '../game/types';
 import { soundEngine } from '../game/audio';
+import { createBelinda3D } from '../game/belinda3d';
 
-/** Active battle view: source-sheet Canvas2D characters, never WebGL character models. */
+/** Active hybrid battle: Canvas2D sprites with a live WebGL Belinda, falling back to her source sheet. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulation = useRef<BattleSimulation | null>(null);
@@ -69,6 +70,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     const images = new Map<string, HTMLImageElement>();
     const failed = new Set<string>();
     const actors = new Map<string, SpriteActor>();
+    const belinda3d = createBelinda3D();
+    let drawn3D: string[] = [];
     let active: BattleSimulation | null = null;
     let frame = 0, previous = 0, accumulator = 0, hudAge = 0;
     let width = 480, height = 680, pixelRatio = 0;
@@ -205,6 +208,11 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       }
       const image = spec && load(spec.src);
       if (drawSpriteIsolation(ctx, unit, point.x, point.y, scale, !!reduceMotion(), live.current.graphicsPreset === 'LOW')) return;
+      if (belinda3d.draw(ctx, unit, actor, (simulation.current?.getElapsedMs() ?? 0) + accumulator,
+        !!reduceMotion(), point.x, point.y, scale)) {
+        drawn3D.push(unit.instanceId);
+        return; // Model owns body poses; never apply a duplicate sprite lunge/rotation.
+      }
       const pose = getSpriteActionPose(actor, unit.facing, !!reduceMotion() || !unit.isAlive);
       ctx.save(); ctx.translate(point.x, point.y);
       // A physical charge already moves its feet in simulation; do not add a second cosmetic lunge.
@@ -245,6 +253,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const dt = previous ? Math.min(0.05, (now - previous) / 1000) : 0; previous = now;
       const sim = simulation.current, p = live.current;
       if (sim !== active) {
+        belinda3d.reset();
         active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }
@@ -268,7 +277,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         if (recipient) effect.target = { x: recipient.x, y: recipient.y };
       }
       impactShake = Math.max(0, impactShake - playDt);
-      drawFloor(); hitAreas = [];
+      drawFloor(); hitAreas = []; drawn3D = [];
       const dimAge = Math.max(0, ...feed.map(entry => entry.remaining - presentation.ultimate.bannerSeconds + presentation.effects.ultimateSeconds));
       if (!reduceMotion() && p.ultimateCameraEnabled !== false && dimAge > 0) {
         ctx.save(); ctx.globalAlpha = presentation.ultimate.dimOpacity * Math.min(1, dimAge / 0.3);
@@ -285,6 +294,13 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       // Bars remain readable above all bodies and spell layers.
       units.forEach(unit => drawUnit(unit, 0, true));
       ctx.restore();
+      canvas.dataset.belinda3d = JSON.stringify({ status: belinda3d.status(), drawn: drawn3D,
+        elapsedMs: sim?.getElapsedMs() ?? 0, paused: p.isPaused, speed: p.battleSpeed,
+        units: units.filter(unit => unit.heroId === 'belinda').map(unit => ({ id: unit.instanceId, alive: unit.isAlive,
+          x: unit.x, y: unit.y, facing: unit.facing, clip: actors.get(unit.instanceId)?.clip, age: actors.get(unit.instanceId)?.age,
+          cast: unit.currentCast && { slot: unit.currentCast.skillSlot, id: unit.currentCast.castId,
+            ageMs: (sim?.getElapsedMs() ?? 0) + accumulator - unit.currentCast.startedAtMs },
+          controls: unit.statusEffects.filter(status => status.remainingMs > 0).map(status => status.type) })) });
       canvas.dataset.activeEffects = String(effects.length);
       // Read-only actual outcome diagnostics; neither test hooks nor the renderer can trigger a proc.
       canvas.dataset.combatOutcomeState = JSON.stringify({ elapsedMs: sim?.getElapsedMs() ?? 0,
@@ -331,12 +347,12 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(frame); ro.disconnect(); canvas.removeEventListener('pointerdown', tap); images.forEach(image => { image.onerror = null; }); };
+    return () => { cancelAnimationFrame(frame); belinda3d.dispose(); ro.disconnect(); canvas.removeEventListener('pointerdown', tap); images.forEach(image => { image.onerror = null; }); };
   }, []);
 
   return <div className="relative h-full w-full overflow-hidden" data-testid="sprite-battle-view" data-battle-renderer="canvas2d-oathbound">
-    <canvas ref={canvasRef} className="block h-full w-full touch-manipulation" aria-label="Chiến đấu bằng sprite 2D Oathbound" />
-    {props.showPerfOverlay && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-[10px] text-amber-200">Oathbound · Sprite 2D</div>}
+    <canvas ref={canvasRef} className="block h-full w-full touch-manipulation" aria-label="Chiến đấu Oathbound: sprite 2D và Belinda 3D thời gian thực" />
+    {props.showPerfOverlay && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-[10px] text-amber-200">Oathbound · 2D + Belinda 3D</div>}
     {announcements.length > 0 && <div ref={bannerRef} data-testid="sprite-ultimate-banner" data-cast-count={announcements.length} data-cast-ids={announcements.map(entry => entry.id).join(',')}
       className={`pointer-events-none absolute inset-x-3 rounded border border-amber-300/60 bg-stone-950/90 px-2 py-1.5 text-[10px] text-amber-100 ${props.showPerfOverlay ? 'top-8' : 'top-2'}`}>
       <div className="mb-1 flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wide">

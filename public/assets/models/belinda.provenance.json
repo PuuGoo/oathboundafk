@@ -1,0 +1,109 @@
+{
+  "asset": "belinda.glb",
+  "source": "assets-source/belinda/belinda.blend",
+  "generator": "tools/build-belinda.py",
+  "created": "2026-11-16",
+  "blender": "5.3.0",
+  "origin": "Locally generated original stylized geometry, materials, rigid-weight armature and keyed actions; no downloaded model, textures, or official mesh.",
+  "visualReference": "Existing project Belinda sprite: blonde hair, crown, white/gold gown, sun staff and blue jewel. Reference character identity is not asserted to be original or licensed by this mesh generation.",
+  "rights": "Generated geometry is new; underlying referenced character identity/design rights are not established here. No claim of official authorization or studio-quality likeness.",
+  "coordinates": {
+    "up": "+Y",
+    "front": "+Z",
+    "feetOrigin": true,
+    "restHeightApprox": 2.87
+  },
+  "rig": {
+    "bones": 14,
+    "weighting": "Rigid 100%-per-part vertex bone weights; no cloth simulation, facial blendshapes, IK or hand finger rig."
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "durationSeconds": 2,
+      "channels": 42
+    },
+    {
+      "name": "run",
+      "durationSeconds": 0.6,
+      "channels": 42
+    },
+    {
+      "name": "basic",
+      "durationSeconds": 0.4,
+      "channels": 42
+    },
+    {
+      "name": "active",
+      "durationSeconds": 1.15,
+      "channels": 42
+    },
+    {
+      "name": "ultimate",
+      "durationSeconds": 1.65,
+      "channels": 42
+    },
+    {
+      "name": "hit",
+      "durationSeconds": 0.3,
+      "channels": 42
+    },
+    {
+      "name": "death",
+      "durationSeconds": 1.2,
+      "channels": 42
+    }
+  ],
+  "milestones": {
+    "basic": {
+      "release": 0.1,
+      "contacts": [
+        0.2
+      ]
+    },
+    "active": {
+      "release": 0.3,
+      "contacts": [
+        0.6
+      ]
+    },
+    "ultimate": {
+      "release": 0.45,
+      "contacts": [
+        0.65,
+        0.85,
+        1.05,
+        1.25
+      ]
+    }
+  },
+  "runtimeContract": "Animations present engine events only. Scrub clip local time from engine timeline; never drive damage from animation callbacks. Clamp death at last frame. Idle/run loop. Hit pauses under control.",
+  "limitations": [
+    "First stylized procedural character study, not a sculpted commercial asset or official likeness.",
+    "Rigid skin weights produce joint intersections under extreme poses; gown and long hair are separate rigid bone-driven meshes, not simulated cloth.",
+    "No actual locomotion stride beneath full skirt beyond alternating boots; no authored facial animation.",
+    "No embedded target VFX or damage logic; existing game effects remain authoritative."
+  ],
+  "metrics": {
+    "glbBytes": 1262632,
+    "glbSha256": "725f79b14f889145f501f140491bdf81de0fae353d646ff7c267049a35e6e467",
+    "generatorSha256": "542f3455d9ef0dbca12cdd728a4b1ae66926138c80b4ea8d7a4cd27de505f35d",
+    "verticesBlender": 15532,
+    "trianglesBlender": 30256,
+    "gltfMeshes": 1,
+    "gltfPrimitives": 14
+  },
+  "previewCameraSuggestion": {
+    "position": [
+      3,
+      1.9,
+      6
+    ],
+    "lookAt": [
+      0,
+      1.4,
+      0
+    ],
+    "orthographicVerticalSpan": 3.6
+  }
+}
