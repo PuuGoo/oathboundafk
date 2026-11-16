@@ -775,6 +775,26 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           }
           ctx.restore(); break;
         case 'rift':
+          if (art.motif === 'vortex') {
+            // Hollow curls descend into the real recipient instead of the shared slit and ellipse gates.
+            const count = lowQuality ? 2 : 3;
+            const curl = radius * (0.38 - travel * 0.16);
+            ctx.save(); ctx.translate(bx, by);
+            for (let i = 0; i < count; i++) {
+              const offset = i - (count - 1) / 2;
+              const y = -radius * (1.8 * (1 - travel) + Math.abs(offset) * 0.12);
+              ctx.save(); ctx.translate(offset * radius * 0.4 * (1 - travel * 0.3), y);
+              ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+              ctx.beginPath(); ctx.moveTo(-curl * 0.65, -curl * 0.9);
+              ctx.quadraticCurveTo(curl, -curl * 0.55, curl * 0.45, curl * 0.4);
+              ctx.quadraticCurveTo(-curl * 0.25, curl * 0.75, -curl * 0.5, 0); ctx.stroke();
+              ctx.strokeStyle = art.accent;
+              ctx.beginPath(); ctx.moveTo(-curl * 0.28, -curl * 0.48);
+              ctx.quadraticCurveTo(curl * 0.5, -curl * 0.2, curl * 0.12, curl * 0.3); ctx.stroke();
+              ctx.restore();
+            }
+            ctx.restore(); break;
+          }
           ctx.save(); ctx.translate(bx, by); ctx.rotate(art.angle);
           if (art.motif === 'coffin') {
             // Outlined halves open around the real victim without painting over their body.

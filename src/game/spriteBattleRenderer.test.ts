@@ -902,6 +902,57 @@ test('actual Belinda ultimate release descends as open branched light rays at th
   }
 });
 
+test('actual Scarlet ultimate descends as hollow curling vortex strands at its real damage recipient', () => {
+  const initial = createInitialData(), heroId = 'scarlet';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
+    { ...hero, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
+    seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.sourceId === source.instanceId && e.castId === cast.castId &&
+    e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  for (const low of [false, true]) {
+    let previousY = -Infinity, previousWidth = Infinity;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, count = low ? 2 : 3;
+      const b = projectSpritePosition(target.x, target.y, 390, 530);
+      const translations = calls.filter(c => c[0] === 'translate');
+      assert.deepEqual(translations[0], ['translate', b.x, b.y - 48 * scale]);
+      assert.equal(translations.length, count + 1);
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'closePath', 'createRadialGradient'].includes(String(c[0]))), false);
+      const y = Number(translations[1][2]);
+      assert.ok(y > previousY && y < 0, 'strands descend into the recipient rather than orbiting a floor ring');
+      previousY = y;
+      const curves = calls.filter(c => c[0] === 'quadraticCurveTo');
+      assert.equal(curves.length, count * 3, 'each open strand has two curved edges and one inner curl');
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 2);
+      const width = Math.abs(Number(curves[0][1]));
+      assert.ok(width < previousWidth && width > 0, 'hollow curls tighten as delivery arrives');
+      previousWidth = width;
+      for (const t of translations.slice(1)) {
+        assert.ok(Math.abs(Number(t[1])) <= radius * 0.6);
+        assert.ok(Number(t[2]) >= -radius * 2 && Number(t[2]) < 0);
+      }
+      for (const c of curves) for (const n of c.slice(1)) assert.ok(Number.isFinite(n) && Math.abs(Number(n)) <= radius * 0.65);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Fawkes ultimate release converges outlined coffin seals without generic orbit diamonds', () => {
   const initial = createInitialData(), heroId = 'fawkes';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
