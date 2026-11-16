@@ -757,6 +757,25 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
             }
             ctx.restore(); break;
           }
+          if (art.motif === 'eye') {
+            // Morrow's hollow eyes open while descending; no opaque pupil or shared pillar ring.
+            const count = lowQuality ? 2 : 3;
+            const w = radius * 0.3, h = radius * (0.08 + travel * 0.16);
+            ctx.save(); ctx.translate(bx, by);
+            for (let i = 0; i < count; i++) {
+              const offset = i - (count - 1) / 2;
+              ctx.save(); ctx.translate(offset * radius * 0.48 * (1 - travel * 0.3),
+                -radius * (1.9 * (1 - travel) + Math.abs(offset) * 0.14));
+              ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+              ctx.beginPath(); ctx.moveTo(-w, 0);
+              ctx.quadraticCurveTo(0, -h * 2, w, 0);
+              ctx.quadraticCurveTo(0, h * 2, -w, 0); ctx.stroke();
+              ctx.strokeStyle = art.accent;
+              path([[0, -h * 0.5], [0, h * 0.5]]);
+              ctx.restore();
+            }
+            ctx.restore(); break;
+          }
           const y = by - radius * 2.3 * (1 - travel);
           ctx.lineWidth = (effect.ultimate ? 4 : 2) * scale;
           path([[bx, y - radius * 0.5], [bx, y]]);
