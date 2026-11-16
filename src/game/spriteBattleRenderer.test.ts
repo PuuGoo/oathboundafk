@@ -6,7 +6,7 @@ import { HeroUltimateBar, ClassicSettingsModal, PopupModal } from '../components
 import assert from 'node:assert/strict';
 import { getOathboundSprite } from './oathboundSprites';
 import { createSpriteActor, advanceSpriteActor, drawSpriteActor, projectSpritePosition, getSpriteBattleScale, startSpriteAction, getSpriteActionPose, resolveSpriteArena, selectSpriteActionClip } from './spriteBattleRenderer';
-import { createSpriteEffect, advanceSpriteEffects, drawSpriteEffects, resolveSpriteEffectTarget, advancePresentationClock, getActiveSkillSources, getActiveImpactSources } from './spriteBattleEffects';
+import { createSpriteEffect, advanceSpriteEffects, drawSpriteEffects, drawSpriteBattleLayers, type SpriteEffect, resolveSpriteEffectTarget, advancePresentationClock, getActiveSkillSources, getActiveImpactSources } from './spriteBattleEffects';
 import { addCombatText, advanceCombatTexts, layoutCombatTexts } from './spriteCombatText';
 import { addUltimateAnnouncement, advanceUltimateAnnouncements, getUltimateAnnouncementView, type UltimateAnnouncement } from './spriteUltimateAnnouncements';
 import { getSpriteUnitStatus, drawSpriteUnitStatus, layoutSpriteUnitStatuses, drawSpriteShieldStatus, getSpriteUnitOverlayBounds } from './spriteUnitStatus';
@@ -21,6 +21,66 @@ import { containDialogFocus } from '../components/dialogFocus';
 import { BattlePauseModal } from '../components/BattlePauseModal';
 import { OATHBOUND_HEROES } from './oathboundHeroes';
 import { getSpriteSkillArt, drawSpriteSkillArt } from './spriteSkillArt';
+
+test('real support cast props follow recipient body depth while attacks and outcomes stay in front', () => {
+  for (const heroId of ['raine', 'rowan', 'rosaline', 'hero_107_peggy', 'hero_68_rigby', 'sonja', 'dawn_oracle', 'celestial_guardian']) for (const slot of ['active', 'ultimate'] as const) {
+    if (slot === 'active' && ['hero_68_rigby', 'celestial_guardian'].includes(heroId)) continue;
+    const initial = createInitialData();
+    const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+    const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, owned]) => [id,
+      { ...owned, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+    const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes,
+      enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+    const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+    sim.consumeEvents(); let entries: CombatEvent[] = [];
+    if (slot === 'ultimate') {
+      assert.equal(sim.triggerUltimate(source.instanceId, true), true); entries = sim.consumeEvents();
+    } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
+      sim.step(50); entries = sim.consumeEvents();
+      if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
+    }
+    const cast = entries.find(e => e.sourceId === source.instanceId && e.type === (slot === 'ultimate' ? 'ultimate_cast' : 'active_skill'))!;
+    assert.ok(cast, `${heroId}: actual ${slot} cast occurred`);
+    const recipient = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills[slot].targetType);
+    assert.equal(recipient.team, source.team);
+    assert.ok(entries.some(e => e.castId === cast.castId && e.targetId === recipient.instanceId && ['heal', 'shield', 'buff'].includes(e.type)));
+    const prop = createSpriteEffect(cast, source, recipient)!;
+    const back = { ...recipient, instanceId: 'back', y: recipient.y - 1 };
+    const near = { ...recipient, instanceId: 'near', y: recipient.y + 1 };
+    const sameRow = { ...recipient, instanceId: 'same-row', x: recipient.x + 1 };
+    const dead = { ...recipient, instanceId: 'dead-recipient', isAlive: false };
+    const units = [near, sameRow, recipient, back, dead];
+    const impact = { ...prop, id: -1, kind: 'impact' as const, support: false };
+    const ward = { ...prop, id: -2, kind: 'shield' as const };
+    const offensive = { ...prop, id: -3, support: false };
+    const basic = { ...prop, id: -4, basic: true, skillSlot: 'basic' as const };
+    const orphan = { ...prop, id: -5, targetId: 'missing-recipient' };
+    const legacy = { ...prop, id: -6, targetId: undefined };
+    const deadProp = { ...prop, id: -7, targetId: dead.instanceId };
+    const unknown = { ...prop, id: -8, sourceHeroId: 'unknown-source' };
+    const effects: SpriteEffect[] = [impact, prop, ward, offensive, basic, orphan, legacy, deadProp, unknown];
+    const before = structuredClone({ units, effects });
+    for (const reduced of [false, true]) {
+      const order: string[] = [];
+      drawSpriteBattleLayers(units, effects, reduced, u => order.push('body:' + u.instanceId), (batch, layer) => {
+        if (layer === 'ground') order.push('ground');
+        else batch.forEach(e => order.push('effect:' + e.id));
+      });
+      const index = (value: string) => order.indexOf(value);
+      assert.equal(order[0], 'ground');
+      assert.ok(index('body:back') < index('body:' + recipient.instanceId));
+      assert.ok(index('body:' + recipient.instanceId) < index('effect:' + prop.id), 'prop is above its own recipient');
+      if (!reduced) assert.ok(index('effect:' + prop.id) < index('body:same-row'), 'same-row x tie follows fighter convention');
+      assert.ok(reduced ? index('effect:' + prop.id) > index('body:near') : index('effect:' + prop.id) < index('body:near'),
+        'nearer body occludes normal props; reduced-motion front ordering stays unchanged');
+      const finalEffects = [impact, ward, offensive, basic, orphan, legacy, deadProp, unknown];
+      for (const other of finalEffects) assert.ok(index('effect:' + other.id) > index('body:near'));
+      for (const unit of units) assert.equal(order.filter(v => v === 'body:' + unit.instanceId).length, 1, 'body callback runs exactly once');
+      assert.deepEqual(order.filter(v => v.startsWith('effect:')), (reduced ? effects : [prop, ...finalEffects]).map(e => 'effect:' + e.id), 'stable batches, no dropped or duplicated feedback');
+      assert.deepEqual({ units, effects }, before, 'layer planning cannot mutate unit state or effect timelines');
+    }
+  }
+});
 
 test('all 22 imported heroes route actual active and ultimate choreography through their real outcomes', () => {
   for (const hero of OATHBOUND_HEROES) {

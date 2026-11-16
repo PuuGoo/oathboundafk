@@ -2,7 +2,7 @@
 import type { BattleUnitRuntime, CombatEvent, HeroSkillSpec, SkillTargetType } from './types';
 import { projectSpritePosition } from './spriteBattleRenderer';
 import presentation from './spritePresentation.json';
-import { drawSpriteSkillArt } from './spriteSkillArt';
+import { drawSpriteSkillArt, getSpriteSkillArt } from './spriteSkillArt';
 
 export interface SpriteEffect {
   id: number;
@@ -24,6 +24,8 @@ export interface SpriteEffect {
   duration: number;
   source: { x: number; y: number };
   target: { x: number; y: number };
+  /** Actual recipient identity for body-depth ordering; older effects without it stay in front. */
+  targetId?: string;
 }
 
 /** Resolves presentation targets from cast outcomes rather than incidental self-support events. */
@@ -67,7 +69,7 @@ export function createSpriteEffect(event: CombatEvent, source: BattleUnitRuntime
     color: kind === 'heal' ? '#6dffc2' : kind === 'shield' ? '#9edfff' : event.vfxColor || '#ffdc84',
     ultimate, basic, skillSlot, support, supportBuff: event.type === 'buff' ? event.buffType : undefined,
     recovery, ccType: event.type === 'crowd_control' ? event.ccType : undefined,
-    age: 0, duration, source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y } };
+    age: 0, duration, source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y }, targetId: target.instanceId };
 }
 
 /** Reports live allied active casts, optionally restricted to a normalized [start, end) phase. */
@@ -93,6 +95,29 @@ export function advanceSpriteEffects(effects: SpriteEffect[], seconds: number): 
     effects[i].age += dt;
     if (effects[i].age >= effects[i].duration) effects.splice(i, 1);
   }
+}
+
+/** Draws battle bodies and spell passes without advancing their simulation or cosmetic clocks. */
+export function drawSpriteBattleLayers(units: readonly BattleUnitRuntime[], effects: readonly SpriteEffect[], reducedMotion: boolean,
+  drawBody: (unit: BattleUnitRuntime) => void,
+  drawEffects: (batch: readonly SpriteEffect[], layer: 'ground' | 'front') => void): void {
+  drawEffects(effects, 'ground');
+  const recipients = new Map(units.filter(unit => unit.isAlive).map(unit => [unit.instanceId, unit]));
+  const props = new Map<string, SpriteEffect[]>(), front: SpriteEffect[] = [];
+  for (const effect of effects) {
+    const recipient = effect.targetId && recipients.get(effect.targetId);
+    if (!reducedMotion && recipient && effect.kind === 'cast' && effect.support && !effect.basic &&
+      (effect.skillSlot === 'active' || effect.skillSlot === 'ultimate') && getSpriteSkillArt(effect.sourceHeroId)) {
+      const batch = props.get(recipient.instanceId) || [];
+      batch.push(effect); props.set(recipient.instanceId, batch);
+    } else front.push(effect);
+  }
+  for (const unit of [...units].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    drawBody(unit);
+    const batch = props.get(unit.instanceId);
+    if (batch) drawEffects(batch, 'front');
+  }
+  drawEffects(front, 'front');
 }
 
 /** Draws layered, deterministic Canvas2D spell choreography with no images or GPU models. */

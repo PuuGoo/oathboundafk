@@ -8,7 +8,7 @@ import { getOathboundSprite } from '../game/oathboundSprites';
 import { getSpriteSkillArt } from '../game/spriteSkillArt';
 import { createBattlePresentationObserver, playBattleImpact } from '../game/battlePresentation';
 import { advanceSpriteActor, createSpriteActor, drawSpriteActor, projectSpritePosition, getSpriteBattleScale, startSpriteAction, getSpriteActionPose, resolveSpriteArena } from '../game/spriteBattleRenderer';
-import { createSpriteEffect, advanceSpriteEffects, drawSpriteEffects, resolveSpriteEffectTarget, advancePresentationClock, getActiveSkillSources, getActiveImpactSources, type SpriteEffect } from '../game/spriteBattleEffects';
+import { createSpriteEffect, advanceSpriteEffects, drawSpriteEffects, drawSpriteBattleLayers, resolveSpriteEffectTarget, advancePresentationClock, getActiveSkillSources, getActiveImpactSources, type SpriteEffect } from '../game/spriteBattleEffects';
 import presentation from '../game/spritePresentation.json';
 import { addCombatText, advanceCombatTexts, layoutCombatTexts, drawCombatTexts, type CombatText } from '../game/spriteCombatText';
 import { addUltimateAnnouncement, advanceUltimateAnnouncements, getUltimateAnnouncementView, type UltimateAnnouncement } from '../game/spriteUltimateAnnouncements';
@@ -249,10 +249,9 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         const strength = presentation.ultimate.shakePixels * impactShake / 0.32;
         ctx.translate(Math.sin(visualClock * 40) * strength, Math.cos(visualClock * 47) * strength * 0.5);
       }
-      drawSpriteEffects(ctx, effects, width, height, !!reduceMotion(), 'ground', p.graphicsPreset === 'LOW');
       const units = sim?.getUnits() || [];
-      [...units].sort((a, b) => a.y - b.y || a.x - b.x).forEach(unit => drawUnit(unit, playDt));
-      drawSpriteEffects(ctx, effects, width, height, !!reduceMotion(), 'front', p.graphicsPreset === 'LOW');
+      drawSpriteBattleLayers(units, effects, !!reduceMotion(), unit => drawUnit(unit, playDt),
+        (batch, layer) => drawSpriteEffects(ctx, batch, width, height, !!reduceMotion(), layer, p.graphicsPreset === 'LOW'));
       // Bars remain readable above all bodies and spell layers.
       units.forEach(unit => drawUnit(unit, 0, true));
       ctx.restore();
