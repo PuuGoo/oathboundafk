@@ -591,6 +591,19 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.fillStyle = art.accent;
           path([[size, 0], [size * 0.35, -size * 0.2], [size * 0.5, 0], [size * 0.35, size * 0.2]], true, true);
           ctx.restore();
+        } else if (art.motif === 'arrows' && effect.sourceHeroId === 'gwyneth' && effect.ultimate) {
+          const bearing = Math.atan2(by - ay, bx - ax), count = lowQuality ? 3 : 5;
+          // A transparent drawn bow frames the coming volley without masking the sprite.
+          ctx.save(); ctx.rotate(bearing); ctx.strokeStyle = art.primary;
+          ctx.beginPath(); ctx.moveTo(0, -radius * 0.3);
+          ctx.quadraticCurveTo(radius * 0.28, 0, 0, radius * 0.3); ctx.stroke();
+          ctx.strokeStyle = art.accent;
+          path([[0, -radius * 0.3], [-radius * (0.08 + charge * 0.14), 0], [0, radius * 0.3]]);
+          ctx.restore();
+          for (let i = 0; i < count; i++) {
+            const spread = (i - (count - 1) / 2) * radius * (0.09 + charge * 0.03);
+            weapon(-Math.sin(bearing) * spread, Math.cos(bearing) * spread, radius * (0.12 + charge * 0.06));
+          }
         } else if (art.motif === 'daggers' && effect.sourceHeroId === 'oscar' && effect.ultimate) {
           const bearing = Math.atan2(by - ay, bx - ax), count = lowQuality ? 2 : 4;
           for (let i = 0; i < count; i++) {

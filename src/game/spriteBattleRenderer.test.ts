@@ -1730,6 +1730,39 @@ test('actual Gwyneth ultimate fans short fletched arrows across the real opponen
     assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
     assert.deepEqual(effect, before);
   }
+  for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.08, 0.14]) {
+    const effect = structuredClone(actual);
+    if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
+    effect.age = effect.duration * phase;
+    const before = structuredClone(effect), calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+      calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+    }, set: () => true }) as CanvasRenderingContext2D;
+    drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+    const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
+    const a = projectSpritePosition(effect.source.x, effect.source.y, 390, 530), b = projectSpritePosition(effect.target.x, effect.target.y, 390, 530);
+    a.y -= 53 * scale; b.y -= 48 * scale;
+    const bearing = Math.atan2(b.y - a.y, b.x - a.x), count = low ? 3 : 5;
+    const moves = calls.filter(c => c[0] === 'translate');
+    assert.equal(moves.length, count + 1, 'caster and nocked ultimate arrows');
+    assert.deepEqual(moves[0], ['translate', a.x, a.y]);
+    for (let i = 0; i < count; i++) {
+      const spread = (i - (count - 1) / 2) * radius * (0.09 + phase / 0.36 * 0.03);
+      assert.ok(Math.abs(Number(moves[i + 1][1]) + Math.sin(bearing) * spread) < 1e-8);
+      assert.ok(Math.abs(Number(moves[i + 1][2]) - Math.cos(bearing) * spread) < 1e-8);
+    }
+    const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, count + 1);
+    rotations.forEach(c => assert.ok(Math.abs(Number(c[1]) - bearing) < 1e-8));
+    assert.deepEqual(calls.filter(c => c[0] === 'quadraticCurveTo'), [['quadraticCurveTo', radius * 0.28, 0, 0, radius * 0.3]], 'open bow limb faces opponent');
+    assert.ok(calls.some(c => c[0] === 'lineTo' && Math.abs(Number(c[1]) + radius * (0.08 + phase / 0.36 * 0.14)) < 1e-8 && c[2] === 0), 'bowstring pulls back as charge advances');
+    assert.equal(calls.filter(c => c[0] === 'fill').length, count);
+    assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 2 + 2, 'arrow shafts/fletchings and open bow/string');
+    assert.equal(calls.some(c => ['arc', 'ellipse', 'createRadialGradient'].includes(String(c[0]))), false);
+    for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+      assert.ok(Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.31, 'compact caster-local bow and arrows');
+    assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+    assert.deepEqual(effect, before);
+  }
 });
 
 test('actual Oscar ultimate fans compact daggers perpendicular to its real opponent bearing', () => {
