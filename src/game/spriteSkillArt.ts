@@ -692,7 +692,14 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
         }
         case 'arc':
           if (art.motif === 'blades') {
-            blade(tx, ty, radius * 0.78);
+            if (effect.sourceHeroId === 'cecilia') {
+              // Twin smaller cuts flank the actual flight path and tighten toward the victim.
+              const bearing = Math.atan2(by - ay, bx - ax);
+              const gap = radius * (0.22 - travel * 0.12);
+              for (const side of [-1, 1]) {
+                blade(tx - Math.sin(bearing) * gap * side, ty + Math.cos(bearing) * gap * side, radius * 0.42);
+              }
+            } else blade(tx, ty, radius * 0.78);
           } else if (art.motif === 'seraph' || art.motif === 'vortex') {
             // A compact signature follows an arcing path; no full-length ribbon masks the bodies.
             const lift = radius * 0.45;

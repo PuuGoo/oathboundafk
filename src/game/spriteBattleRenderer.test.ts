@@ -856,6 +856,57 @@ test('actual awakened Thane ultimate converges open wind blades on its real dama
   }
 });
 
+test('actual Cecilia active delivers paired small blades along its real opponent bearing', () => {
+  const initial = createInitialData(), heroId = 'cecilia';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
+    { ...hero, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
+    seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+  sim.consumeEvents(); let entries: CombatEvent[] = [];
+  for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
+    sim.step(50); entries = sim.consumeEvents();
+    if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
+  }
+  const cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'active_skill')!; assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.active.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.castId === cast.castId && e.sourceId === source.instanceId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  const scale = Math.min(390 / 480, 530 / 680), radius = 43 * scale;
+  const a = projectSpritePosition(source.x, source.y, 390, 530), b = projectSpritePosition(target.x, target.y, 390, 530);
+  a.y -= 53 * scale; b.y -= 48 * scale;
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  for (const low of [false, true]) {
+    let previousGap = Infinity;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const travel = (phase - 0.18) / 0.32;
+      const center = { x: a.x + (b.x - a.x) * travel, y: a.y + (b.y - a.y) * travel };
+      const moves = calls.filter(c => c[0] === 'translate'); assert.equal(moves.length, 2);
+      const dx = Number(moves[1][1]) - Number(moves[0][1]), dy = Number(moves[1][2]) - Number(moves[0][2]);
+      const gap = Math.hypot(dx, dy); assert.ok(gap < previousGap && gap > radius * 0.1 && gap < radius * 0.5); previousGap = gap;
+      assert.ok(Math.abs(dx * Math.cos(angle) + dy * Math.sin(angle)) < 1e-8, 'paired blades flank the actual path');
+      assert.ok(Math.abs((Number(moves[0][1]) + Number(moves[1][1])) / 2 - center.x) < 1e-8);
+      assert.ok(Math.abs((Number(moves[0][2]) + Number(moves[1][2])) / 2 - center.y) < 1e-8);
+      const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 2);
+      rotations.forEach(c => assert.ok(Math.abs(Number(c[1]) - angle) < 1e-8));
+      assert.equal(calls.filter(c => c[0] === 'fill').length, 2);
+      assert.equal(calls.filter(c => c[0] === 'quadraticCurveTo').length, 6);
+      for (const c of calls.filter(c => ['moveTo', 'quadraticCurveTo'].includes(String(c[0]))))
+        for (let i = 1; i < c.length; i += 2) assert.ok(Math.hypot(Number(c[i]), Number(c[i + 1])) <= radius * 0.6);
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Cecilia ultimate converges open blade pairs rather than a generic rift gate', () => {
   const initial = createInitialData(), heroId = 'cecilia';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
