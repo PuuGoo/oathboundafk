@@ -60,6 +60,18 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
     }
     ctx.restore();
   };
+  const shotgun = (size: number) => {
+    // One transparent weapon profile shared by preparation and the stock-first active strike.
+    ctx.strokeStyle = art.primary;
+    path([[-size * 0.34, -size * 0.02], [-size * 0.12, -size * 0.02],
+      [-size * 0.08, -size * 0.07], [size * 0.38, -size * 0.07],
+      [size * 0.38, size * 0.02], [size * 0.05, size * 0.02],
+      [-size * 0.04, size * 0.07], [-size * 0.12, size * 0.05],
+      [-size * 0.2, size * 0.15], [-size * 0.34, size * 0.15]], true);
+    ctx.strokeStyle = art.accent;
+    path([[0, -size * 0.025], [size * 0.32, -size * 0.025]]);
+    path([[size * 0.08, size * 0.045], [size * 0.22, size * 0.045]]);
+  };
   const blade = (x: number, y: number, size: number) => {
     ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(by - ay, bx - ax));
     ctx.fillStyle = art.primary;
@@ -642,16 +654,9 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.restore();
         } else if (art.motif === 'crossfire' && effect.sourceHeroId === 'walker') {
           const bearing = Math.atan2(by - ay, bx - ax), size = radius * (0.85 + charge * 0.15);
-          ctx.rotate(bearing); ctx.strokeStyle = art.primary;
+          ctx.rotate(bearing);
           // Walker readies one shotgun: long barrel, pump and broad shoulder stock.
-          path([[-size * 0.34, -size * 0.02], [-size * 0.12, -size * 0.02],
-            [-size * 0.08, -size * 0.07], [size * 0.38, -size * 0.07],
-            [size * 0.38, size * 0.02], [size * 0.05, size * 0.02],
-            [-size * 0.04, size * 0.07], [-size * 0.12, size * 0.05],
-            [-size * 0.2, size * 0.15], [-size * 0.34, size * 0.15]], true);
-          ctx.strokeStyle = art.accent;
-          path([[0, -size * 0.025], [size * 0.32, -size * 0.025]]);
-          path([[size * 0.08, size * 0.045], [size * 0.22, size * 0.045]]);
+          shotgun(size);
         } else if (art.motif === 'arrows' && effect.sourceHeroId === 'gwyneth') {
           const bearing = Math.atan2(by - ay, bx - ax), count = effect.ultimate ? (lowQuality ? 3 : 5) : 1;
           // A transparent drawn bow frames the coming volley without masking the sprite.
@@ -793,6 +798,12 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
         ctx.restore();
       } else switch (delivery) {
         case 'thrust': {
+          if (effect.sourceHeroId === 'walker' && !effect.ultimate) {
+            // Spittoon Smack uses the broad stock, not a second gunshot or an extra damage event.
+            ctx.save(); ctx.translate(tx, ty); ctx.rotate(Math.atan2(by - ay, bx - ax) + Math.PI);
+            shotgun(radius * (0.95 - travel * 0.15));
+            ctx.restore(); break;
+          }
           if (art.motif === 'bastion') {
             // A shield bash carries a transparent face along the real strike, not a spear shaft.
             const h = radius * 0.48, w = h * 0.65;

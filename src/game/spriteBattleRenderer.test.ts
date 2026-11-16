@@ -706,6 +706,9 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
         assert.equal(calls.filter(c => c[0] === 'stroke').length, 4, 'bow limb, string, arrow shaft and fletching');
         for (const c of calls.filter(c => ['moveTo', 'lineTo', 'quadraticCurveTo'].includes(String(c[0]))))
           for (const value of c.slice(1)) assert.ok(Number.isFinite(Number(value)) && Math.abs(Number(value)) <= radius * 0.31);
+      } else if (heroId === 'walker') {
+        assert.ok(calls.some(c => c[0] === 'stroke'));
+        assert.equal(calls.some(c => c[0] === 'fill'), false, 'preparation and stock strike both leave the body visible');
       } else assert.ok(calls.some(c => c[0] === 'fill') && calls.some(c => c[0] === 'stroke'));
       assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
       assert.deepEqual(effect, before);
@@ -1884,6 +1887,59 @@ test('blade deliveries sweep toward the recipient instead of using a spear or ge
   }
 });
 
+test('actual Walker active delivers a transparent shotgun stock strike instead of a floating bullet', () => {
+  const heroId = 'walker', initial = createInitialData();
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, entry]) => [id,
+    { ...entry, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+  sim.consumeEvents(); let entries: CombatEvent[] = [];
+  for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
+    sim.step(50); entries = sim.consumeEvents();
+    if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
+  }
+  const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
+  assert.ok(cast, 'natural Spittoon Smack required');
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.active.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
+  const actual = createSpriteEffect(cast, source, target)!;
+  for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.38, 0.42, 0.45]) {
+    // Mirror the real endpoints to exercise the same stock-first stroke from either side.
+    const effect = { ...actual, source: { ...actual.source, x: reverse ? 1000 - actual.source.x : actual.source.x },
+      target: { ...actual.target, x: reverse ? 1000 - actual.target.x : actual.target.x }, age: actual.duration * phase };
+    const before = structuredClone(effect), calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+      calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+    }, set: () => true }) as CanvasRenderingContext2D;
+    assert.equal(drawSpriteSkillArt(ctx, effect, 390, 530, false, low), true);
+    const scale = Math.min(390 / 480, 530 / 680), radius = 43 * scale;
+    const a = projectSpritePosition(effect.source.x, effect.source.y, 390, 530);
+    const b = projectSpritePosition(effect.target.x, effect.target.y, 390, 530);
+    a.y -= 53 * scale; b.y -= 48 * scale;
+    const travel = Math.max(0, Math.min(1, (phase - 0.18) / 0.32));
+    const translations = calls.filter(c => c[0] === 'translate');
+    assert.equal(translations.length, 1, 'one weapon stroke, not another attack');
+    assert.ok(Math.abs(Number(translations[0][1]) - (a.x + (b.x - a.x) * travel)) < 1e-8);
+    assert.ok(Math.abs(Number(translations[0][2]) - (a.y + (b.y - a.y) * travel)) < 1e-8);
+    const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 1);
+    assert.ok(Math.abs(Number(rotations[0][1]) - (Math.atan2(b.y - a.y, b.x - a.x) + Math.PI)) < 1e-8,
+      'broad shoulder stock leads, not the muzzle');
+    assert.equal(calls.filter(c => c[0] === 'closePath').length, 1, 'shotgun silhouette');
+    assert.equal(calls.filter(c => c[0] === 'stroke').length, 3, 'profile, barrel seam and pump');
+    assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'createRadialGradient'].includes(String(c[0]))), false,
+      'no bullet, explosion or opaque body cover');
+    const size = radius * (0.95 - travel * 0.15);
+    assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === -size * 0.34 && c[2] === size * 0.15));
+    for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+      assert.ok(Number.isFinite(Number(c[1])) && Number.isFinite(Number(c[2])) && Math.hypot(Number(c[1]), Number(c[2])) < radius * 0.4);
+    assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+    assert.deepEqual(effect, before);
+  }
+});
+
 test('actual Walker ultimate delivers a narrow bullet fan along its real opponent bearing', () => {
   const initial = createInitialData(), heroId = 'walker';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
@@ -2142,8 +2198,12 @@ test('ranged arrow and bullet deliveries use oriented weapon glyphs instead of v
     drawSpriteSkillArt(ctx, effect, 390, 530, false, false);
     const a = projectSpritePosition(source.x, source.y, 390, 530), b = projectSpritePosition(target.x, target.y, 390, 530);
     const bearing = Math.atan2(b.y - a.y + 5 * Math.min(390 / 480, 530 / 680), b.x - a.x);
-    assert.ok(calls.some(call => call[0] === 'rotate' && Math.abs((call[1] as number) - bearing) < 1e-10), `${heroId}: projectile glyph aligns with trajectory`);
-    if (heroId === 'gwyneth') assert.ok(calls.filter(call => call[0] === 'lineTo').length >= 7, 'arrow has a head and rear fletching');
+    const stockStrike = heroId === 'walker' && !ultimate;
+    assert.ok(calls.some(call => call[0] === 'rotate' && Math.abs((call[1] as number) - bearing - (stockStrike ? Math.PI : 0)) < 1e-10), `${heroId}: weapon aligns with trajectory`);
+    if (stockStrike) {
+      assert.equal(calls.some(call => call[0] === 'ellipse' || call[0] === 'fill'), false, 'stock strike is transparent, not a flying bullet');
+      assert.equal(calls.filter(call => call[0] === 'stroke').length, 3);
+    } else if (heroId === 'gwyneth') assert.ok(calls.filter(call => call[0] === 'lineTo').length >= 7, 'arrow has a head and rear fletching');
     else assert.ok(calls.some(call => call[0] === 'ellipse'), 'bullet has a rounded luminous head, not an arrowhead');
     assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
   }
