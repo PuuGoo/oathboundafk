@@ -1,0 +1,75 @@
+{
+  "id": "estrilda",
+  "heroId": "estrilda",
+  "name": "Estrilda",
+  "source": "assets-source/estrilda/estrilda.blend",
+  "asset": "estrilda.glb",
+  "generator": "tools/build-heroes.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated stylized geometry, named rigid-weight armature and keyed actions; no downloaded meshes or textures.",
+  "visualReference": "Existing project identity and sprite equipment, interpreted as a procedural 3D study.",
+  "signature": "Armored horse, crimson saddlecloth, long lance and plumed helm",
+  "rights": "New geometry does not establish rights to referenced character identities/designs. Not an official model or a sculpted production likeness.",
+  "coordinates": {
+    "up": "+Y",
+    "front": "+Z",
+    "feetOrigin": true
+  },
+  "rig": {
+    "bones": 27,
+    "weighting": "Rigid 100% per articulated part; no facial/cloth simulation or finger IK."
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "seconds": 2,
+      "channels": 81
+    },
+    {
+      "name": "run",
+      "seconds": 0.6,
+      "channels": 81
+    },
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 81
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 81
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 81
+    },
+    {
+      "name": "hit",
+      "seconds": 0.3,
+      "channels": 81
+    },
+    {
+      "name": "death",
+      "seconds": 1.2,
+      "channels": 81
+    }
+  ],
+  "runtimeContract": "Presentation only; first-squad casts use engine time. Other heroes use their existing presentation action lifetime. No combat callbacks or root-motion damage.",
+  "limitations": [
+    "Procedural stylized study, not an exact replica or human-approved art.",
+    "Rigid joints/cloth may intersect in extreme poses.",
+    "Other heroes retain existing Canvas2D spell effects; these GLBs contain body/weapon animation only."
+  ],
+  "metrics": {
+    "glbBytes": 765488,
+    "glbSha256": "302e0cfac6bbdae15c7a5fbda1c6de1987a81f874bf320e85167103337a2995c",
+    "generatorSha256": "fc8be685f7c414bf3477311e679c702b61f77c087ecb4fc9376c8375a97ec3ed",
+    "specSha256": "afc6fed2748bcb786a5b62c4005f0af15f9e5e376ec26d24279c0268919142c0",
+    "vertices": 7521,
+    "triangles": 14558,
+    "meshes": 1,
+    "primitives": 12
+  }
+}

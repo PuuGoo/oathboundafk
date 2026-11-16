@@ -1,7 +1,7 @@
 <!-- PROTOTYPE - NOT FOR PRODUCTION -->
 # Belinda realtime 3D
 
-Task: **BELINDA-3D-001**. Belinda alone uses a locally generated, animated GLB in the active `SpriteBattleCanvas` path. Other heroes remain source-sheet sprites. This is a live WebGL render composited into Canvas2D, not a rendered sprite sheet and not a replacement combat engine.
+Original task: **BELINDA-3D-001** introduced a locally generated, animated GLB for Belinda in the active `SpriteBattleCanvas` path. The subsequent [roster expansion](roster-3d.md) now uses one shared backend for all 22 Oathbound identities, retaining Belinda's assets and spell meshes. This remains a live WebGL render composited into Canvas2D, not a rendered sprite sheet or a replacement combat engine. The original task verification below is historical; the roster document records current integration checks and visual-review limits.
 
 ## Assets and rebuild
 
@@ -40,7 +40,7 @@ Isolation keeps its existing body replacement. Hard control freezes the last mod
 
 ## Failure behavior and lifetime
 
-Only an encountered Belinda initiates loading. The original sprite is drawn during loading, on asset failure, on unavailable/lost WebGL or on a rendering exception. A failed load is not retried every frame. Unmount disposes the renderer, materials, geometry, skeletons and mixer bindings; a model finishing after unmount is immediately disposed. Battle restart releases per-instance state without reloading the shared model.
+The shared roster backend now lazily queues each encountered hero's model. The original sprite is drawn during loading, on asset failure, on unavailable/lost WebGL or on a rendering exception. A failed asset is not retried every frame and does not disable the other loaded heroes. Unmount disposes the renderer, materials, geometry, skeletons and mixer bindings; a model finishing after unmount is immediately disposed. Battle restart now releases per-instance state and cached models to bound memory across roster changes.
 
 The read-only `canvas.dataset.belinda3d` reports readiness, actually drawn instance IDs, simulation time, pause/speed and Belinda cast/action state. It cannot issue combat actions.
 

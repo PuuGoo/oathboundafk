@@ -17,10 +17,10 @@ import type { SpriteActor } from '../game/spriteBattleRenderer';
 import type { BattleUnitRuntime, CombatEvent } from '../game/types';
 import { isUnitAvailable } from '../game/types';
 import { soundEngine } from '../game/audio';
-import { createBelinda3D } from '../game/belinda3d';
+import { createHero3D } from '../game/hero3d';
 import { spellEffectsForFallback } from '../game/belindaSpell3d';
 
-/** Active hybrid battle: Canvas2D sprites with a live WebGL Belinda, falling back to her source sheet. */
+/** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulation = useRef<BattleSimulation | null>(null);
@@ -71,7 +71,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     const images = new Map<string, HTMLImageElement>();
     const failed = new Set<string>();
     const actors = new Map<string, SpriteActor>();
-    const belinda3d = createBelinda3D();
+    const heroes3d = createHero3D();
     let drawn3D: string[] = [];
     let active: BattleSimulation | null = null;
     let frame = 0, previous = 0, accumulator = 0, hudAge = 0;
@@ -210,7 +210,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       }
       const image = spec && load(spec.src);
       if (drawSpriteIsolation(ctx, unit, point.x, point.y, scale, !!reduceMotion(), live.current.graphicsPreset === 'LOW')) return;
-      if (belinda3d.draw(ctx, unit, actor, (simulation.current?.getElapsedMs() ?? 0) + accumulator,
+      if (heroes3d.draw(ctx, unit, actor, (simulation.current?.getElapsedMs() ?? 0) + accumulator,
         !!reduceMotion(), point.x, point.y, scale)) {
         drawn3D.push(unit.instanceId);
         return; // Model owns body poses; never apply a duplicate sprite lunge/rotation.
@@ -255,7 +255,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const dt = previous ? Math.min(0.05, (now - previous) / 1000) : 0; previous = now;
       const sim = simulation.current, p = live.current;
       if (sim !== active) {
-        belinda3d.reset();
+        heroes3d.reset();
         active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }
@@ -288,7 +288,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         }
       }
       impactShake = Math.max(0, impactShake - playDt);
-      drawFloor(); hitAreas = []; drawn3D = [];
+      drawFloor(); hitAreas = []; drawn3D = []; heroes3d.beginFrame();
       const dimAge = Math.max(0, ...feed.map(entry => entry.remaining - presentation.ultimate.bannerSeconds + presentation.effects.ultimateSeconds));
       if (!reduceMotion() && p.ultimateCameraEnabled !== false && dimAge > 0) {
         ctx.save(); ctx.globalAlpha = presentation.ultimate.dimOpacity * Math.min(1, dimAge / 0.3);
@@ -303,7 +303,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const spellDrawn = new Map<number, string>();
       drawSpriteBattleLayers(units, effects, !!reduceMotion(), unit => drawUnit(unit, playDt),
         (batch, layer) => {
-          const handled = belinda3d.drawSpells(ctx, batch, layer, { width, height,
+          const handled = heroes3d.drawSpells(ctx, batch, layer, { width, height,
             reducedMotion: !!reduceMotion(), low: p.graphicsPreset === 'LOW' });
           handled.forEach(id => spellDrawn.set(id, layer));
           drawSpriteEffects(ctx, spellEffectsForFallback(batch, handled), width, height,
@@ -317,7 +317,16 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       // Bars remain readable above all bodies and spell layers.
       units.forEach(unit => drawUnit(unit, 0, true));
       ctx.restore();
-      canvas.dataset.belinda3d = JSON.stringify({ status: belinda3d.status(), drawn: drawn3D,
+      canvas.dataset.heroes3d = JSON.stringify({ status: heroes3d.status(), drawn: drawn3D,
+        models: Object.fromEntries(heroes3d.modelStatuses().map(model => [model.heroId, model.status])),
+        elapsedMs: sim?.getElapsedMs() ?? 0, paused: p.isPaused, speed: p.battleSpeed,
+        units: units.map(unit => ({ id: unit.instanceId, heroId: unit.heroId, alive: unit.isAlive,
+          x: unit.x, y: unit.y, facing: unit.facing, clip: actors.get(unit.instanceId)?.clip, age: actors.get(unit.instanceId)?.age,
+          cast: unit.currentCast && { slot: unit.currentCast.skillSlot, id: unit.currentCast.castId,
+            ageMs: (sim?.getElapsedMs() ?? 0) + accumulator - unit.currentCast.startedAtMs },
+          controls: unit.statusEffects.filter(status => status.remainingMs > 0).map(status => status.type) })) });
+      const belindaIds = new Set(units.filter(unit => unit.heroId === 'belinda').map(unit => unit.instanceId));
+      canvas.dataset.belinda3d = JSON.stringify({ status: heroes3d.modelStatus('belinda'), drawn: drawn3D.filter(id => belindaIds.has(id)),
         elapsedMs: sim?.getElapsedMs() ?? 0, paused: p.isPaused, speed: p.battleSpeed,
         units: units.filter(unit => unit.heroId === 'belinda').map(unit => ({ id: unit.instanceId, alive: unit.isAlive,
           x: unit.x, y: unit.y, facing: unit.facing, clip: actors.get(unit.instanceId)?.clip, age: actors.get(unit.instanceId)?.age,
@@ -370,12 +379,12 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(frame); belinda3d.dispose(); ro.disconnect(); canvas.removeEventListener('pointerdown', tap); images.forEach(image => { image.onerror = null; }); };
+    return () => { cancelAnimationFrame(frame); heroes3d.dispose(); ro.disconnect(); canvas.removeEventListener('pointerdown', tap); images.forEach(image => { image.onerror = null; }); };
   }, []);
 
   return <div className="relative h-full w-full overflow-hidden" data-testid="sprite-battle-view" data-battle-renderer="canvas2d-oathbound">
-    <canvas ref={canvasRef} className="block h-full w-full touch-manipulation" aria-label="Chiến đấu Oathbound: sprite 2D và Belinda 3D thời gian thực" />
-    {props.showPerfOverlay && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-[10px] text-amber-200">Oathbound · 2D + Belinda 3D</div>}
+    <canvas ref={canvasRef} className="block h-full w-full touch-manipulation" aria-label="Chiến đấu Oathbound: anh hùng 3D thời gian thực với sprite dự phòng" />
+    {props.showPerfOverlay && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-[10px] text-amber-200">Oathbound · Anh hùng 3D</div>}
     {announcements.length > 0 && <div ref={bannerRef} data-testid="sprite-ultimate-banner" data-cast-count={announcements.length} data-cast-ids={announcements.map(entry => entry.id).join(',')}
       className={`pointer-events-none absolute inset-x-3 rounded border border-amber-300/60 bg-stone-950/90 px-2 py-1.5 text-[10px] text-amber-100 ${props.showPerfOverlay ? 'top-8' : 'top-2'}`}>
       <div className="mb-1 flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wide">

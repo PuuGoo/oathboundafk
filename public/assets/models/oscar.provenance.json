@@ -1,0 +1,75 @@
+{
+  "id": "oscar",
+  "heroId": "oscar",
+  "name": "Oscar",
+  "source": "assets-source/oscar/oscar.blend",
+  "asset": "oscar.glb",
+  "generator": "tools/build-heroes.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated stylized geometry, named rigid-weight armature and keyed actions; no downloaded meshes or textures.",
+  "visualReference": "Existing project identity and sprite equipment, interpreted as a procedural 3D study.",
+  "signature": "Tailored dark butler suit, white shirt, bow tie, moustache and throwing knives",
+  "rights": "New geometry does not establish rights to referenced character identities/designs. Not an official model or a sculpted production likeness.",
+  "coordinates": {
+    "up": "+Y",
+    "front": "+Z",
+    "feetOrigin": true
+  },
+  "rig": {
+    "bones": 17,
+    "weighting": "Rigid 100% per articulated part; no facial/cloth simulation or finger IK."
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "seconds": 2,
+      "channels": 51
+    },
+    {
+      "name": "run",
+      "seconds": 0.6,
+      "channels": 51
+    },
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 51
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 51
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 51
+    },
+    {
+      "name": "hit",
+      "seconds": 0.3,
+      "channels": 51
+    },
+    {
+      "name": "death",
+      "seconds": 1.2,
+      "channels": 51
+    }
+  ],
+  "runtimeContract": "Presentation only; first-squad casts use engine time. Other heroes use their existing presentation action lifetime. No combat callbacks or root-motion damage.",
+  "limitations": [
+    "Procedural stylized study, not an exact replica or human-approved art.",
+    "Rigid joints/cloth may intersect in extreme poses.",
+    "Other heroes retain existing Canvas2D spell effects; these GLBs contain body/weapon animation only."
+  ],
+  "metrics": {
+    "glbBytes": 456564,
+    "glbSha256": "0835b661ed0a563f68c51f375a558a66586ec16bbd70cf6dc68aea422104d45f",
+    "generatorSha256": "fc8be685f7c414bf3477311e679c702b61f77c087ecb4fc9376c8375a97ec3ed",
+    "specSha256": "afc6fed2748bcb786a5b62c4005f0af15f9e5e376ec26d24279c0268919142c0",
+    "vertices": 4028,
+    "triangles": 7780,
+    "meshes": 1,
+    "primitives": 10
+  }
+}
