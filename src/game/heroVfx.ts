@@ -34,7 +34,7 @@ const FILE_OVERRIDES: Readonly<Record<string, string>> = Object.freeze({
  * single switch that turns a hero's 3D skills on; the matching asset and
  * provenance file must land in the same commit.
  */
-const ENABLED = new Set<string>(['lancer', 'mage', 'warden', 'ranger']);
+const ENABLED = new Set<string>(['lancer', 'mage', 'warden', 'ranger', 'healer']);
 
 export const HERO_VFX_DEFINITIONS: readonly HeroVfxDefinition[] = Object.freeze(
   OATHBOUND_HEROES.filter(hero => ENABLED.has(hero.sourceId)).map(hero => Object.freeze({

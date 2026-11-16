@@ -363,14 +363,15 @@ def build_bloom():
 
 def build_storm():
     """Bão/hắc ám: tia chớp tỏa, cầu lệch tâm và vành xung kích nghiêng."""
-    for i in range(9):
-        cone(f'Bolt {i + 1}', .035, .004, .55, 'vfx_glow', role='spike',
-             phase=i / 9 * TAU + RNG.random() * .3, spread=.8, delay=.04 + (i % 3) * .03)
-    torus('Shock ring', .62, .02, 'vfx_alt', tilt=1.22, twist=1.8)
-    torus('Upper ring', .4, .014, 'vfx_glow', tilt=.9, twist=-2.2, delay=.05)
-    ico('Void core', .18, 'vfx_glow', role='core')
-    spikes(8, 1.0, .3, 'vfx_alt', size=.03, delay=.09)
-    motes(8, 1.0, .045, 'vfx_glow', rise=.45, delay=.12)
+    for i in range(11):
+        cone(f'Bolt {i + 1}', .052, .004, .78, 'vfx_glow', role='spike',
+             phase=i / 11 * TAU + RNG.random() * .3, spread=1.0, delay=.04 + (i % 3) * .03)
+    torus('Shock ring', .84, .026, 'vfx_alt', tilt=1.22, twist=1.8)
+    torus('Upper ring', .56, .018, 'vfx_glow', tilt=.9, twist=-2.2, delay=.05)
+    torus('Inner ring', .34, .012, 'vfx_core', tilt=.6, twist=2.6, delay=.02)
+    ico('Void core', .22, 'vfx_core', role='core')
+    spikes(10, 1.15, .42, 'vfx_alt', size=.045, delay=.09)
+    motes(10, 1.05, .06, 'vfx_glow', rise=.5, delay=.12)
 
 
 def build_gunfire():

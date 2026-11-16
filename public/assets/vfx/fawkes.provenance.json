@@ -1,0 +1,56 @@
+{
+  "id": "fawkes",
+  "heroId": "fawkes",
+  "name": "Fawkes",
+  "family": "storm",
+  "source": "assets-source/vfx/fawkes/fawkes.blend",
+  "asset": "fawkes.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Tia ch\u1edbp xanh ng\u1ecdc t\u1eeb n\u1ecf, v\u00f2ng xung k\u00edch t\u00edm v\u00e0 h\u1ea1t t\u1ed1i cho th\u1ee3 s\u0103n quan t\u00e0i.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 101
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 101
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 101
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 101
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 485464,
+    "glbSha256": "47173961fe98a4b5b71a4096cb87564ae773b14245eeb7f82ada81b86ad560d4",
+    "generatorSha256": "24f55d7444e8e8de5c676f70860841bacbddb932048905d5d6cc5f49394e5192",
+    "specSha256": "e940f1d33a21360ca8788b04e0330ad5ab107b6a5ff0f0532b9217e964627467",
+    "objects": 35,
+    "vertices": 1334,
+    "triangles": 2536,
+    "meshes": 35,
+    "materials": 3
+  }
+}

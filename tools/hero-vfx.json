@@ -2,5 +2,6 @@
   {"id":"belinda","heroId":"belinda","family":"sigil","name":"Belinda","primary":"fff2c8","secondary":"7fd8ff","accent":"ffc061","intensity":1.0,"note":"Golden astral sigil, orbiting rings and star motes for holy arcane casts."},
   {"id":"estrilda","heroId":"estrilda","family":"lance","name":"Estrilda","primary":"dfe6ee","secondary":"8e3141","accent":"7cc9f0","intensity":1.05,"note":"Thép bạc, khăn yên đỏ thẫm và mũi thương băng lam dài trên ngựa."},
   {"id":"lucius","heroId":"celestial_guardian","family":"bloom","name":"Lucius","primary":"f2eedd","secondary":"2f76bd","accent":"8fdcf8","intensity":1.1,"note":"Giáp ngà, cột sáng xanh thiên và cánh hoa quang minh quanh khiên mặt trời."},
-  {"id":"raine","heroId":"raine","family":"gunfire","name":"Raine","primary":"f6d3a2","secondary":"b0363c","accent":"ffc45c","intensity":1.15,"note":"Chớp đầu nòng vàng, vệt đạn đỏ son và vành xung kích nhỏ cho song súng lục."}
+  {"id":"raine","heroId":"raine","family":"gunfire","name":"Raine","primary":"f6d3a2","secondary":"b0363c","accent":"ffc45c","intensity":1.15,"note":"Chớp đầu nòng vàng, vệt đạn đỏ son và vành xung kích nhỏ cho song súng lục."},
+  {"id":"fawkes","heroId":"fawkes","family":"storm","name":"Fawkes","primary":"cfd6dc","secondary":"7a5c8c","accent":"6ad5c5","intensity":1.1,"note":"Tia chớp xanh ngọc từ nỏ, vòng xung kích tím và hạt tối cho thợ săn quan tài."}
 ]
