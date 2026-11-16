@@ -574,6 +574,48 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
   }
 });
 
+test('actual Lucius offensive anticipation prepares an open shield instead of rotating filled diamonds', () => {
+  const heroId = 'celestial_guardian', initial = createInitialData();
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
+    { ...hero, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
+    seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+  sim.consumeEvents(); let entries: CombatEvent[] = [];
+  for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
+    sim.step(50); entries = sim.consumeEvents();
+    if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
+  }
+  const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.active.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  for (const phase of [0.08, 0.14]) for (const low of [false, true]) {
+    effect.age = effect.duration * phase;
+    const before = structuredClone(effect), calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+      calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+    }, set: () => true }) as CanvasRenderingContext2D;
+    assert.equal(drawSpriteSkillArt(ctx, effect, 390, 530, false, low), true);
+    assert.equal(calls.some(call => ['rotate', 'fill', 'arc', 'ellipse', 'createRadialGradient'].includes(String(call[0]))), false,
+      'transparent upright shield, never shared filled diamonds or a body halo');
+    assert.equal(calls.filter(call => call[0] === 'quadraticCurveTo').length, 2, 'two rounded shield flanks');
+    assert.equal(calls.filter(call => call[0] === 'closePath').length, 1);
+    assert.equal(calls.filter(call => call[0] === 'stroke').length, 3, 'one outline and two inset ribs');
+    const scale = Math.min(390 / 480, 530 / 680), a = projectSpritePosition(source.x, source.y, 390, 530);
+    assert.ok(calls.some(call => call[0] === 'translate' && call[1] === a.x && call[2] === a.y - 53 * scale));
+    const size = 43 * scale * (0.24 + phase / 0.36 * 0.24);
+    for (const call of calls.filter(call => ['moveTo', 'lineTo', 'quadraticCurveTo'].includes(String(call[0])))) {
+      for (const value of call.slice(1)) assert.ok(Number.isFinite(value) && Math.abs(Number(value)) <= size + 1e-9);
+    }
+    assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+    assert.deepEqual(effect, before);
+  }
+});
+
 test('actual Eluard active charge unfolds a caster-local faceted prism without generic spinning diamonds', () => {
   for (const heroId of ['eluard', 'hero_248_eluard']) {
     const initial = createInitialData();

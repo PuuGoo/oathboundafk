@@ -498,7 +498,7 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
     // Anticipation stays on the caster; a fine energy ribbon connects to the actual recipient.
     if (p < 0.36) {
       const charge = p / 0.36;
-      if (!['lance', 'blades', 'arrows', 'crossfire', 'daggers', 'prism'].includes(art.motif)) {
+      if (!['lance', 'blades', 'arrows', 'crossfire', 'daggers', 'prism', 'aegis'].includes(art.motif)) {
         halo(ax, ay, radius * (0.3 + charge * 0.45));
       }
       ctx.save(); ctx.translate(ax, ay);
@@ -517,6 +517,18 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.strokeStyle = i % 2 ? art.accent : art.primary;
           ctx.beginPath(); ctx.arc(0, 0, radius * (0.2 + i * 0.1), angle, angle + Math.PI * 1.25); ctx.stroke();
         }
+      } else if (art.motif === 'aegis') {
+        const size = radius * (0.24 + charge * 0.24);
+        // This open charge emblem prepares the attack; it never grants or reapplies a shield.
+        ctx.strokeStyle = art.primary;
+        ctx.beginPath(); ctx.moveTo(-size * 0.65, -size * 0.6);
+        ctx.lineTo(0, -size * 0.85); ctx.lineTo(size * 0.65, -size * 0.6);
+        ctx.quadraticCurveTo(size * 0.7, size * 0.45, 0, size);
+        ctx.quadraticCurveTo(-size * 0.7, size * 0.45, -size * 0.65, -size * 0.6);
+        ctx.closePath(); ctx.stroke();
+        ctx.strokeStyle = art.accent;
+        path([[0, -size * 0.5], [0, size * 0.5]]);
+        path([[-size * 0.3, -size * 0.2], [0, 0], [size * 0.3, -size * 0.2]]);
       } else if (['coffin', 'eye', 'embers', 'bastion'].includes(art.motif)) {
         const size = radius * (0.24 + charge * 0.24);
         ctx.strokeStyle = art.primary;
