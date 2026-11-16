@@ -345,12 +345,14 @@ def build_volley():
     """Loạt tên: nhiều mũi bay theo vòng cung, có vệt và vòng va chạm."""
     arrows = 4 + RNG.randint(0, 3)
     for i in range(arrows):
-        cone(f'Arrow {i + 1}', .045, 0.0, .5, 'vfx_core', role='spike',
+        cone(f'Arrow {i + 1}', .075, 0.0, .75, 'vfx_core', role='spike',
              phase=-.9 + i * .45, spread=.5 + i * .06 + RNG.random() * .1, delay=i * .03)
-        box(f'Arrow trail {i + 1}', (.012, .012, .3), 'vfx_alt', role='spoke',
-             phase=-.9 + i * .45, spread=.7, delay=i * .03)
-    rings(2, [.5 + RNG.random() * .1, .74], [1.3, 1.18], ['vfx_glow', 'vfx_alt'], minor=.013, delay=.06)
-    motes(5 + RNG.randint(0, 3), .8, .04, 'vfx_glow', rise=.4)
+        box(f'Arrow trail {i + 1}', (.03, .03, .5), 'vfx_alt', role='spoke',
+            phase=-.9 + i * .45, spread=.7, delay=i * .03)
+    rings(2, [.62 + RNG.random() * .1, .9], [1.3, 1.18], ['vfx_glow', 'vfx_alt'], minor=.02, delay=.06)
+    torus('Volley arc', .74, .016, 'vfx_glow', tilt=.42, twist=1.6, delay=.04)
+    spikes(8 + RNG.randint(0, 4), .9, .38, 'vfx_glow', size=.04, delay=.07)
+    motes(8 + RNG.randint(0, 3), .9, .06, 'vfx_glow', rise=.5)
 
 
 def build_bloom():

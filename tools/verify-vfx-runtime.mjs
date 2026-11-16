@@ -15,7 +15,7 @@ const origin = 'http://127.0.0.1:3002';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const seconds = Number(process.argv[2] || 45);
-const prefix = `vfx-runtime-${seconds}s`;
+let prefix = `vfx-runtime-${seconds}s`;
 const scratch = path.join(process.env.LOCALAPPDATA, 'hermes/cache/scratch');
 fs.mkdirSync(scratch, { recursive: true }); fs.mkdirSync(output, { recursive: true });
 const profile = fs.mkdtempSync(path.join(scratch, 'vfx3d-qa-'));
@@ -32,7 +32,11 @@ const group = requested.length ? [...requested]
   : OATHBOUND_HEROES.map(hero => hero.heroId).filter(id => enabled.has(id)).slice(0, 5);
 for (const hero of OATHBOUND_HEROES) { if (group.length >= 5) break; if (!group.includes(hero.heroId)) group.push(hero.heroId); }
 for (const heroId of requested) assert.ok(heroes.has(heroId), `unknown hero in --heroes: ${heroId}`);
+assert.equal(group.length, 5, 'fixture requires exactly five formation slots');
+assert.equal(new Set(group).size, 5, 'formation must not contain duplicates');
+prefix += '-' + group.join('-');
 const result = { mode: prefix, group, errors: [], failedAssets: [], hashes: {}, seen: {}, models: {}, pauseStable: null, speed2: null };
+const uniqueEffects = new Map();
 
 let ws;
 try {
@@ -115,6 +119,8 @@ try {
       result.all[key] = (result.all[key] || 0) + 1;
       if (!effect.rendered3d) continue;
       result.seen[key] = (result.seen[key] || 0) + 1;
+      const ids = uniqueEffects.get(key) || new Set();
+      ids.add(effect.id); uniqueEffects.set(key, ids);
     }
     passes++;
     const drawnSlots = new Set(Object.keys(result.seen));
@@ -122,14 +128,16 @@ try {
     const hasActive = [...drawnSlots].some(key => key.includes(':cast:active'));
     const hasUltimate = [...drawnSlots].some(key => key.includes(':cast:ultimate'));
     const hasImpact = [...drawnSlots].some(key => key.includes(':impact:'));
-    if (hasBasic && hasActive && hasUltimate && hasImpact && passes > 5) break;
+    const covered = group.filter(id => enabled.has(id)).every(id =>
+      [...drawnSlots].some(key => key.startsWith(id + ':')));
+    if (covered && hasBasic && hasActive && hasUltimate && hasImpact && passes > 5) break;
     await sleep(120);
   }
   await shot('combat');
   // Chỉ id do GLB vẽ mới được ghi; art Canvas2D cũ không thể làm test này xanh.
   // Slot active cần tự kiểm riêng: ở stage 1 Belinda bị stun/knockback nên cast bị huỷ.
   const drawnKeys = Object.keys(result.seen);
-  assert.equal(result.models.belinda, 'ready', 'committed Blender effect never loaded');
+  if (group.includes('belinda')) assert.equal(result.models.belinda, 'ready', 'committed Blender effect never loaded');
   for (const [label, needle] of [['basic cast', ':cast:basic'], ['ultimate cast', ':cast:ultimate'],
     ['damage impact', ':impact:']]) {
     assert.ok(drawnKeys.some(key => key.includes(needle)), `no Blender-drawn ${label} observed`);
@@ -165,8 +173,10 @@ try {
   const after = (await evaluate(vfxState)).effects?.filter(effect => effect.rendered3d).length || 0;
   result.speed2Frames = { beforePasses: passes, drawnAfter: after };
   assert.deepEqual(result.errors, []);
+  result.uniqueEffects = Object.fromEntries([...uniqueEffects].map(([key, ids]) => [key, ids.size]));
+  result.countMeaning = 'seen/all are sampled frames; uniqueEffects deduplicates real effect IDs';
   fs.writeFileSync(path.join(output, `${prefix}-browser.json`), JSON.stringify(result, null, 2) + '\n');
-  console.log(JSON.stringify({ group, models: result.models, seen: result.seen, all: result.all,
+  console.log(JSON.stringify({ group, uniqueEffects: result.uniqueEffects,
     errors: result.errors.length, failedAssets: result.failedAssets,
     pauseStable: result.pauseStable, speed2: result.speed2, before }));
 } catch (error) {

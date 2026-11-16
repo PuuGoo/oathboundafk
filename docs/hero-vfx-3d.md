@@ -23,7 +23,7 @@ Một Blender mỗi lần, hai luồng CPU; bỏ `--no-preview` sẽ render thê
 
 ## Họ hiệu ứng
 
-Sáu họ silhouette, mỗi họ có tổ hợp part khác nhau và tham số theo tướng:
+Bảy họ hình học, mỗi họ có tổ hợp part khác nhau và tham số theo tướng:
 
 | family | Nhận diện | Dùng cho |
 |---|---|---|
@@ -33,18 +33,20 @@ Sáu họ silhouette, mỗi họ có tổ hợp part khác nhau và tham số th
 | `volley` | nhiều mũi tên cung, vệt, vòng chạm | cung thủ |
 | `bloom` | cánh hoa nở, cột sáng, hạt chữa trị | hồi máu / buff |
 | `storm` | tia chớp tỏa, cầu lệch tâm, vành xung kích | sát thương phép |
+| `gunfire` | chớp đầu nòng, vệt đạn, vòng xung kích | súng |
 
 Material được đặt tên cố định `vfx_core`, `vfx_glow`, `vfx_alt`, `vfx_halo`; runtime đọc tên để gán hệ số mờ riêng (halo mờ nhất) và `low` preset giảm tiếp lớp halo.
 
 ## Runtime
 
-- `src/game/heroVfx.ts`: logic thuần. Chọn clip theo `skillSlot` thật (`basic`/`active`/`ultimate`), outcome thật (damage/heal/shield/control/mark…) dùng clip `impact`. Phase `charge`/`flight`/`recovery` lấy từ `CombatTimeline` khi có, nếu không thì theo tỉ lệ thời lượng trình diễn. Batch mỗi layer tối đa 8 hiệu ứng, ưu tiên ultimate rồi impact rồi id mới.
+- `src/game/heroVfx.ts`: chọn clip theo `skillSlot` thật (`basic`/`active`/`ultimate`). Chỉ damage outcome dùng clip `impact`; heal/shield/control/mark giữ art Canvas có ý nghĩa riêng. Phase lấy từ `CombatTimeline` khi có, còn lại theo thời lượng trình diễn, không khẳng định là contact marker của engine. Mỗi batch tối đa 8 hiệu ứng; phần vượt giới hạn giữ Canvas.
 - `src/game/heroVfx3d.ts`: một scene, một camera ortho khớp khung canvas, pool instance theo `effect.id`. Mỗi layer pass render **một lần** rồi composite vào Canvas2D; effect không xử lý được giữ nguyên art Canvas2D.
 - `hero3d.ts`: `drawSpells` thử GLB trước, sau đó mới tới hiệu ứng Belinda cũ, nên asset lỗi/đang tải không làm mất hiệu ứng nào.
-- Thời gian animation đặt bằng `mixer.setTime`, lấy từ tuổi effect do đồng hồ trận đấu đẩy → pause, ×2, clamp khi chết giữ nguyên hành vi.
+- Thời gian animation đặt bằng `mixer.setTime` từ tuổi effect; pause và ×2 theo đồng hồ trận đấu. Reduced-motion dùng pose tĩnh trong GLB; LOW giảm lớp halo. Pool tối đa 16 instance, giải phóng material riêng khi loại instance và cache khi đổi trận. Hiệu ứng damage đã phát có thể tiếp tục sau khi caster chết; không phải death freeze.
 
 ## Trạng thái hiện tại
 
-- Bật cho: **Belinda** (`sigil`). Mười một tướng còn lại vẫn dùng art Canvas2D cho tới khi GLB của chúng được dựng và bật trong `src/game/heroVfx.ts`.
+- Danh sách đang bật là `HERO_VFX_DEFINITIONS` trong `src/game/heroVfx.ts`; prebuild đối chiếu với `tools/hero-vfx.json` và GLB/source thật. Các tướng được bổ sung theo từng commit riêng.
+- Báo cáo runtime lưu theo tên đội hình, phân biệt id do GLB vẽ với hiệu ứng Belinda cũ. `seen`/`all` đếm khung hình lấy mẫu; `uniqueEffects` đếm effect id duy nhất. Các con số `seen` trong commit ban đầu không phải số lần tung chiêu. Đặc biệt bản quan sát Hendrik trước đó chỉ ghi nhận cast basic bằng GLB, impact basic của Hendrik ở lượt đó vẫn là Canvas.
 - Asset được kiểm tra bằng công cụ thật; ảnh preview Blender được tạo nhưng công cụ thị giác của phiên làm việc trả lỗi 403, nên **chưa có phê duyệt mỹ thuật bằng mắt**. Coverage pixel chỉ chứng minh có hình sáng được render, không chứng minh "đẹp".
 - Chưa đo FPS/GPU tối thiểu; giới hạn 8 hiệu ứng/layer là để chặn chi phí chứ chưa phải kết quả đo hiệu năng.

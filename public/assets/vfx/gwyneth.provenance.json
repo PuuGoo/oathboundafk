@@ -1,0 +1,56 @@
+{
+  "id": "gwyneth",
+  "heroId": "gwyneth",
+  "name": "Gwyneth",
+  "family": "volley",
+  "source": "assets-source/vfx/gwyneth/gwyneth.blend",
+  "asset": "gwyneth.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Lo\u1ea1t t\u00ean ng\u00e0-xanh l\u00e1 c\u1ee7a cung th\u1ee7: m\u0169i t\u00ean cung, v\u1ec7t s\u00e1ng v\u00e0 v\u00f2ng ch\u1ea1m.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 96
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 96
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 96
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 96
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 455404,
+    "glbSha256": "895297842e6e0247480b09bebe8e6f2c8f1238b66d1531ec766c9eecda5cbf57",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "fabca4ab3c5e1d83b41b5f3c76cb020f82f9295eb9e79efddddc4c8a639206dd",
+    "objects": 33,
+    "vertices": 1195,
+    "triangles": 2266,
+    "meshes": 33,
+    "materials": 3
+  }
+}
