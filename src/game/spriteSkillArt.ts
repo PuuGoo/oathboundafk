@@ -626,7 +626,21 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
       } else if (art.motif === 'prism' && (delivery === 'orbit' || delivery === 'rift')) {
         ctx.save(); ctx.translate(bx, by);
         const size = radius * 0.42;
-        if (delivery === 'orbit') {
+        if (delivery === 'orbit' && effect.sourceHeroId === 'hero_248_eluard' && effect.ultimate) {
+          // Four sanctuary faces close on the real opponent; LOW keeps an opposing pair.
+          const count = lowQuality ? 2 : 4, h = radius * 0.3;
+          const w = radius * (0.1 + travel * 0.1), distance = radius * (0.72 - travel * 0.44);
+          for (let i = 0; i < count; i++) {
+            const angle = -Math.PI / 2 + i * Math.PI * 2 / count;
+            ctx.save(); ctx.translate(Math.cos(angle) * distance, Math.sin(angle) * distance);
+            ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+            path([[0, -h], [w, 0], [0, h], [-w, 0]], true);
+            ctx.strokeStyle = art.accent;
+            path([[0, -h], [0, h]]);
+            path([[-w, 0], [w, 0]]);
+            ctx.restore();
+          }
+        } else if (delivery === 'orbit') {
           // Transparent facets converge around the actual recipient; no filled orbiting diamonds.
           const distance = radius * (0.65 - travel * 0.35);
           for (let i = 0; i < 3; i++) {

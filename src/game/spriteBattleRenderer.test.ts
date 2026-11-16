@@ -1148,6 +1148,57 @@ test('actual Hendrik ultimate drops outlined bastion faces on an enemy while pre
   }
 });
 
+test('actual awakened Eluard ultimate converges four transparent sanctuary facets at its real opponent', () => {
+  const initial = createInitialData(), heroId = 'hero_248_eluard';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.castId === cast.castId && e.sourceId === source.instanceId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  assert.equal(effect.support, false);
+  const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
+  const b = projectSpritePosition(target.x, target.y, 390, 530);
+  for (const low of [false, true]) {
+    const count = low ? 2 : 4;
+    let previousDistance = Infinity, previousWidth = 0;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: () => true }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const moves = calls.filter(c => c[0] === 'translate');
+      assert.equal(moves.length, count + 1);
+      assert.equal(moves[0][1], b.x); assert.equal(moves[0][2], b.y - 48 * scale);
+      const travel = (phase - 0.18) / 0.32, distance = radius * (0.72 - travel * 0.44);
+      assert.ok(distance < previousDistance); previousDistance = distance;
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + i * Math.PI * 2 / count;
+        assert.ok(Math.abs(Number(moves[i + 1][1]) - Math.cos(angle) * distance) < 1e-8);
+        assert.ok(Math.abs(Number(moves[i + 1][2]) - Math.sin(angle) * distance) < 1e-8);
+      }
+      const lines = calls.filter(c => c[0] === 'lineTo');
+      const width = Math.max(...lines.map(c => Math.abs(Number(c[1]))));
+      assert.ok(width > previousWidth && width < radius * 0.25); previousWidth = width;
+      assert.equal(calls.filter(c => c[0] === 'closePath').length, count);
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 3, 'each face retains its spine and cross seam');
+      assert.equal(calls.some(c => ['fill', 'ellipse', 'arc', 'rotate', 'quadraticCurveTo'].includes(String(c[0]))), false);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0])))) {
+        assert.ok(Math.abs(Number(c[1])) <= radius * 0.25 && Math.abs(Number(c[2])) <= radius * 0.31);
+      }
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Eluard ultimate descends through transparent prism faces at its real victim', () => {
   const initial = createInitialData(), heroId = 'eluard';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
