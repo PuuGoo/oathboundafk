@@ -10,6 +10,8 @@ import { getCombatTimeline } from './skillTimelines';
 import type { BattleUnitRuntime, CombatEvent } from './types';
 import type { SpriteEffect } from './spriteBattleEffects';
 import { VFX_CLIP_SECONDS } from './heroVfx';
+import { HERO_VFX_DEFINITIONS, getHeroVfx } from './heroVfx';
+import { OATHBOUND_HEROES } from './oathboundHeroes';
 
 const source = { instanceId: 'mage', heroId: 'belinda', team: 'ally', x: 250, y: 230 } as BattleUnitRuntime;
 const target = { instanceId: 'locked', heroId: 'lucius', team: 'enemy', x: 650, y: 260 } as BattleUnitRuntime;
@@ -23,6 +25,8 @@ const cast = (slot: 'basic' | 'active' | 'ultimate', age = 0, id = 1) =>
 const frame = { width: 480, height: 680, reducedMotion: false, low: false };
 /** Records are keyed by source id; Belinda's authored file is `belinda.glb`. */
 const BOOT = 'mage';
+/** A roster hero with no committed effect, chosen at runtime so later heroes cannot break this. */
+const disabledHero = OATHBOUND_HEROES.find(hero => !getHeroVfx(hero.heroId));
 const settle = async (scene: { status(id: string): string }, id = BOOT) => {
   for (let attempt = 0; attempt < 200 && scene.status(id) === 'loading'; attempt++) {
     await new Promise<void>(resolve => setTimeout(resolve, 5));
@@ -84,11 +88,11 @@ test('heroes without a Blender effect, settled ages and unrelated effects stay o
   const scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   const ready = cast('active', .2); scene.draw(renderer, ctx, [ready], 'front', frame);
   await settle(scene);
-  const foreign = { ...cast('active', .2, 3), sourceHeroId: 'rowan' };
+  const foreign = { ...cast('active', .2, 3), sourceHeroId: disabledHero?.heroId ?? 'not-a-hero' };
   const settled = cast('active', VFX_CLIP_SECONDS.active, 4);
   const negative = cast('active', -1, 5);
   assert.equal(scene.draw(renderer, ctx, [foreign, settled, negative], 'front', frame).size, 0);
-  assert.equal(scene.status('rowan'), 'missing');
+  if (disabledHero) assert.equal(scene.status(disabledHero.sourceId), 'missing');
   scene.dispose();
 });
 

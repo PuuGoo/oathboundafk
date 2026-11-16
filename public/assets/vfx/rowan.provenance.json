@@ -1,0 +1,56 @@
+{
+  "id": "rowan",
+  "heroId": "rowan",
+  "name": "Rowan",
+  "family": "sigil",
+  "source": "assets-source/vfx/rowan/rowan.blend",
+  "asset": "rowan.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "V\u00f2ng tri\u1ec7u h\u1ed3i l\u00e1 xanh c\u1ee7a tr\u01b0\u1ee3ng bu\u00f4n: v\u00e0nh xoay, h\u1ea1t v\u00e0ng v\u00e0 c\u1ed9t s\u00e1ng cho Rowan.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 62
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 62
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 62
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 62
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 323440,
+    "glbSha256": "3e8e7cf18fcd8f7db266e66ddc39f3006072dabfee3b19c958c4ca3e4bb8673f",
+    "generatorSha256": "0a03999dd366f8e9a31997c15a0dd080aa624e2bea2a0b7afd0f9d71b22b77e1",
+    "specSha256": "4ee2c388aa168d8a2b78e301a9aedb17250f8d06c5218452f2acfe3fce35b2b0",
+    "objects": 23,
+    "vertices": 1372,
+    "triangles": 2664,
+    "meshes": 23,
+    "materials": 4
+  }
+}

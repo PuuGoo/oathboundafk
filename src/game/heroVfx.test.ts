@@ -23,11 +23,15 @@ const outcome = (age = 0, id = 9) => ({
   ...createSpriteEffect(event('active', { id, type: 'damage', value: 12, skillSlot: 'active' }), source, target)!, age,
 });
 const sample = (effect: SpriteEffect, reducedMotion = false) => sampleHeroVfx(effect, 480, 680, reducedMotion);
+/** Any roster hero without a committed effect; tests must survive heroes being enabled later. */
+const disabledHero = OATHBOUND_HEROES.find(hero => !getHeroVfx(hero.heroId));
 
 test('only roster heroes with a committed Blender effect resolve, by stable hero id', () => {
   const definition = getHeroVfx('belinda');
   assert.equal(definition?.url, '/assets/vfx/belinda.glb');
-  assert.equal(getHeroVfx('rowan'), undefined, 'a hero without an effect asset stays Canvas2D');
+  if (disabledHero) {
+    assert.equal(getHeroVfx(disabledHero.heroId), undefined, 'a hero without an effect asset stays Canvas2D');
+  }
   assert.ok(HERO_VFX_DEFINITIONS.length > 0, 'at least one hero must ship an effect');
   for (const entry of HERO_VFX_DEFINITIONS) {
     assert.ok(OATHBOUND_HEROES.some(hero => hero.heroId === entry.heroId), `${entry.heroId} must be a roster hero`);
@@ -45,7 +49,7 @@ test('cast effects request the clip of their real slot; outcomes request the imp
   assert.equal(sample(damage)?.clip, 'impact');
   assert.equal(sample(damage)?.slot, 'active');
   assert.equal(sample(damage)?.grounded, true);
-  assert.equal(sample({ ...outcome(), sourceHeroId: 'rowan' }), undefined);
+  if (disabledHero) assert.equal(sample({ ...outcome(), sourceHeroId: disabledHero.heroId }), undefined);
 });
 
 test('heal, shield and control keep their semantic Canvas art instead of masking it', () => {

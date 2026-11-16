@@ -5,5 +5,6 @@
   {"id":"raine","heroId":"raine","family":"gunfire","name":"Raine","primary":"f6d3a2","secondary":"b0363c","accent":"ffc45c","intensity":1.15,"note":"Chớp đầu nòng vàng, vệt đạn đỏ son và vành xung kích nhỏ cho song súng lục."},
   {"id":"fawkes","heroId":"fawkes","family":"storm","name":"Fawkes","primary":"cfd6dc","secondary":"7a5c8c","accent":"6ad5c5","intensity":1.1,"note":"Tia chớp xanh ngọc từ nỏ, vòng xung kích tím và hạt tối cho thợ săn quan tài."},
   {"id":"thane","heroId":"astral_blademaster","family":"strike","name":"Thane","primary":"dbe6ef","secondary":"2f6b93","accent":"9dd8f5","intensity":1.1,"note":"Ba lưỡi liềm bạc xanh của kiếm sĩ một tay, vòng chạm và mảnh băng."},
-  {"id":"hendrik","heroId":"iron_bastion","family":"strike","name":"Hendrik","primary":"b5b7bd","secondary":"4b5770","accent":"75adcf","intensity":"1.15","note":"Khiên nện: lưỡi liềm thép rộng, vòng xung kích xanh thép và mảnh vụn cho hộ vệ hai khiên."}
+  {"id":"hendrik","heroId":"iron_bastion","family":"strike","name":"Hendrik","primary":"b5b7bd","secondary":"4b5770","accent":"75adcf","intensity":"1.15","note":"Khiên nện: lưỡi liềm thép rộng, vòng xung kích xanh thép và mảnh vụn cho hộ vệ hai khiên."},
+  {"id":"rowan","heroId":"rowan","family":"sigil","name":"Rowan","primary":"6f9c78","secondary":"8e5332","accent":"69c9b7","intensity":"1.0","note":"Vòng triệu hồi lá xanh của trượng buôn: vành xoay, hạt vàng và cột sáng cho Rowan."}
 ]
