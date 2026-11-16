@@ -1724,21 +1724,18 @@ test('actual Walker ultimate delivers a narrow bullet fan along its real opponen
     const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
     const a = projectSpritePosition(effect.source.x, effect.source.y, 390, 530), b = projectSpritePosition(effect.target.x, effect.target.y, 390, 530);
     a.y -= 53 * scale; b.y -= 48 * scale;
-    const bearing = Math.atan2(b.y - a.y, b.x - a.x), gap = radius * (0.22 - phase / 0.36 * 0.08);
-    const moves = calls.filter(c => c[0] === 'translate'); assert.equal(moves.length, 3, 'caster and two readied pistols');
-    assert.deepEqual(moves[0], ['translate', a.x, a.y]);
-    for (const [i, side] of [-1, 1].entries()) {
-      assert.ok(Math.abs(Number(moves[i + 1][1]) + Math.sin(bearing) * gap * side) < 1e-8);
-      assert.ok(Math.abs(Number(moves[i + 1][2]) - Math.cos(bearing) * gap * side) < 1e-8);
-    }
-    const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 2);
-    rotations.forEach(c => assert.ok(Math.abs(Number(c[1]) - bearing) < 1e-8));
-    assert.equal(calls.filter(c => c[0] === 'closePath').length, 2, 'two outlined barrel-and-grip profiles');
-    assert.equal(calls.filter(c => c[0] === 'stroke').length, 4, 'two pistol profiles and two barrel insets');
+    const bearing = Math.atan2(b.y - a.y, b.x - a.x);
+    assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x, a.y]], 'one shotgun readied at caster');
+    const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 1);
+    assert.ok(Math.abs(Number(rotations[0][1]) - bearing) < 1e-8);
+    assert.equal(calls.filter(c => c[0] === 'closePath').length, 1, 'single shotgun stock and long barrel outline');
+    assert.equal(calls.filter(c => c[0] === 'stroke').length, 3, 'shotgun profile, barrel seam and pump grip');
     assert.equal(calls.some(c => ['fill', 'ellipse', 'arc', 'quadraticCurveTo', 'createRadialGradient'].includes(String(c[0]))), false, 'preparation has no fired bullets or flash');
-    assert.equal(calls.filter(c => c[0] === 'lineTo' && c[1] === -radius * 0.2 && c[2] === radius * 0.18).length, 2, 'both guns retain a readable grip');
+    const size = radius * (0.85 + phase / 0.36 * 0.15);
+    assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === -size * 0.34 && c[2] === size * 0.15), 'broad shoulder stock, not paired pistol grips');
+    assert.ok(calls.some(c => c[0] === 'lineTo' && c[1] === size * 0.38 && c[2] === -size * 0.07), 'long forward shotgun barrel');
     for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
-      assert.ok(Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.28);
+      assert.ok(Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.4);
     assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
     assert.deepEqual(effect, before);
   }

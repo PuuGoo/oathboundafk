@@ -607,18 +607,17 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           path([[size, 0], [size * 0.35, -size * 0.2], [size * 0.5, 0], [size * 0.35, size * 0.2]], true, true);
           ctx.restore();
         } else if (art.motif === 'crossfire' && effect.sourceHeroId === 'walker' && effect.ultimate) {
-          const bearing = Math.atan2(by - ay, bx - ax), gap = radius * (0.22 - charge * 0.08);
-          for (const side of [-1, 1]) {
-            ctx.save(); ctx.translate(-Math.sin(bearing) * gap * side, Math.cos(bearing) * gap * side);
-            ctx.rotate(bearing); ctx.strokeStyle = art.primary;
-            // Readied barrel and grip, not a premature projectile or muzzle flash.
-            path([[-radius * 0.22, -radius * 0.06], [radius * 0.22, -radius * 0.06],
-              [radius * 0.22, radius * 0.04], [-radius * 0.04, radius * 0.04],
-              [-radius * 0.09, radius * 0.18], [-radius * 0.2, radius * 0.18]], true);
-            ctx.strokeStyle = art.accent;
-            path([[-radius * 0.1, -radius * 0.01], [radius * 0.15, -radius * 0.01]]);
-            ctx.restore();
-          }
+          const bearing = Math.atan2(by - ay, bx - ax), size = radius * (0.85 + charge * 0.15);
+          ctx.rotate(bearing); ctx.strokeStyle = art.primary;
+          // Walker readies one shotgun: long barrel, pump and broad shoulder stock.
+          path([[-size * 0.34, -size * 0.02], [-size * 0.12, -size * 0.02],
+            [-size * 0.08, -size * 0.07], [size * 0.38, -size * 0.07],
+            [size * 0.38, size * 0.02], [size * 0.05, size * 0.02],
+            [-size * 0.04, size * 0.07], [-size * 0.12, size * 0.05],
+            [-size * 0.2, size * 0.15], [-size * 0.34, size * 0.15]], true);
+          ctx.strokeStyle = art.accent;
+          path([[0, -size * 0.025], [size * 0.32, -size * 0.025]]);
+          path([[size * 0.08, size * 0.045], [size * 0.22, size * 0.045]]);
         } else if (art.motif === 'arrows' && effect.sourceHeroId === 'gwyneth' && effect.ultimate) {
           const bearing = Math.atan2(by - ay, bx - ax), count = lowQuality ? 3 : 5;
           // A transparent drawn bow frames the coming volley without masking the sprite.
