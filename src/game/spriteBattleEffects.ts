@@ -220,6 +220,23 @@ export function drawSpriteEffects(ctx: CanvasRenderingContext2D, effects: readon
       line(0, -size * 0.45, 0, size * 0.45);
       ctx.restore(); continue;
     }
+    if (layer === 'front' && effect.basic && effect.kind === 'cast' && !effect.support && effect.shape === 'beam' &&
+      !reducedMotion && getSpriteSkillArt(effect.sourceHeroId)) {
+      const p = Math.max(0, Math.min(1, effect.age / effect.duration));
+      const a = projectSpritePosition(effect.source.x, effect.source.y, width, height);
+      const b = projectSpritePosition(effect.target.x, effect.target.y, width, height);
+      const ay = a.y - 52 * scale, by = b.y - 48 * scale;
+      const travel = Math.max(0, Math.min(1, (p - 0.12) / 0.38));
+      const length = Math.min(12 * scale, Math.hypot(b.x - a.x, by - ay) * 0.2);
+      ctx.save(); ctx.translate(a.x + (b.x - a.x) * travel, ay + (by - ay) * travel);
+      ctx.rotate(Math.atan2(by - ay, b.x - a.x));
+      ctx.globalAlpha *= Math.min(1, p * 12) * Math.min(1, (1 - p) * 4) * 0.7;
+      ctx.shadowBlur = 0; ctx.lineCap = 'round'; ctx.strokeStyle = effect.color; ctx.lineWidth = Math.max(1, 2 * scale);
+      line(-length, 0, length * 0.35, 0);
+      ctx.strokeStyle = '#fff8e6'; ctx.lineWidth = Math.max(0.75, scale);
+      line(-length * 0.45, 0, length * 0.35, 0);
+      ctx.restore(); continue;
+    }
     if (layer === 'front' && drawSpriteSkillArt(ctx, effect, width, height, reducedMotion, lowQuality)) continue;
     const p = Math.min(1, effect.age / effect.duration);
     if (layer === 'ground' && (effect.kind !== 'cast' || effect.basic || p >= presentation.effects.groundChargeEnd)) continue;

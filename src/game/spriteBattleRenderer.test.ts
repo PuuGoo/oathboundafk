@@ -2220,6 +2220,56 @@ test('actual weapon skill damage uses compact directional cuts or punctures with
   }
 });
 
+test('actual imported basic beams travel as short crisp rays instead of body-spanning white bars', () => {
+  let covered = 0;
+  for (const hero of OATHBOUND_HEROES) {
+    const definition = getHeroById(hero.heroId);
+    if (definition.skills.basic.vfxShape !== 'beam') continue;
+    const initial = createInitialData();
+    const formation = [hero.heroId, ...initial.formation.filter(id => id !== hero.heroId)].slice(0, 5) as TeamFormationSlots;
+    const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, entry]) => [id,
+      { ...entry, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+    const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes,
+      enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+    const source = sim.getUnits().find(u => u.heroId === hero.heroId && u.team === 'ally')!;
+    sim.consumeEvents(); let entries: CombatEvent[] = [];
+    for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
+      sim.step(50); entries = sim.consumeEvents();
+      if (entries.some(e => e.sourceId === source.instanceId && e.type === 'basic_attack')) break;
+    }
+    const cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'basic_attack')!; assert.ok(cast);
+    const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, definition.skills.basic.targetType);
+    assert.notEqual(source.team, target.team);
+    assert.ok(entries.some(e => e.castId === cast.castId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+    const effect = createSpriteEffect(cast, source, target)!; covered++;
+    for (const phase of [0.2, 0.55, 0.85]) for (const low of [false, true]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: (_, key, value) => { calls.push(['set', String(key), value]); return true; } }) as CanvasRenderingContext2D;
+      drawSpriteEffects(ctx, [effect], 390, 530, false, 'ground', low);
+      assert.equal(calls.length, 0, 'basic ray has no floor sigil');
+      drawSpriteEffects(ctx, [effect], 390, 530, false, 'front', low);
+      const scale = Math.min(390 / 480, 530 / 680);
+      const a = projectSpritePosition(source.x, source.y, 390, 530), b = projectSpritePosition(target.x, target.y, 390, 530);
+      a.y -= 52 * scale; b.y -= 48 * scale;
+      const travel = Math.max(0, Math.min(1, (phase - 0.12) / 0.38));
+      assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x + (b.x - a.x) * travel, a.y + (b.y - a.y) * travel]]);
+      const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 1);
+      assert.ok(Math.abs(Number(rotations[0][1]) - Math.atan2(b.y - a.y, b.x - a.x)) < 1e-8);
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, 2, 'short ray and narrow core');
+      assert.equal(calls.some(c => ['arc', 'ellipse', 'fill', 'createRadialGradient'].includes(String(c[0]))), false);
+      assert.equal(calls.some(c => c[0] === 'set' && c[1] === 'shadowBlur' && Number(c[2]) > 0), false);
+      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
+        assert.ok(Number.isFinite(Number(c[1])) && Number.isFinite(Number(c[2])) && Math.hypot(Number(c[1]), Number(c[2])) <= 12 * scale, 'ray never spans the source-to-target distance');
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+  assert.ok(covered > 0, 'actual beam basic attacks exercised');
+});
+
 test('actual basic damage stays a compact unglowed contact accent rather than a spell ring and particle burst', () => {
   for (const hero of OATHBOUND_HEROES) {
     const initial = createInitialData();
