@@ -1,5 +1,5 @@
 // PROTOTYPE - NOT FOR PRODUCTION
-// Authorized Oathbound transfer changes display names only; target mechanics stay intact.
+// Oathbound identities preserve IDs; first-squad combat corrections are explicitly tested.
 import {
   HeroDefinition,
   OwnedHeroState,
@@ -47,7 +47,7 @@ const CORE_12_RAW: HeroDefinition[] = [
       active: {
         name: 'Judgement Bash',
         description:
-          'Slams the frontline with a golden tower shield, dealing 165% ATK and Stunning the target for 2.2s.',
+          'Bashes the locked enemy at impact for 165% ATK, stunning them for 2.2s and granting Lucius a 180% ATK personal shield. Hard control interrupts preparation.',
         cooldownMs: 6500,
         damageMultiplier: 1.65,
         targetType: 'current_target',
@@ -60,9 +60,9 @@ const CORE_12_RAW: HeroDefinition[] = [
       ultimate: {
         name: 'Aegis of the Eternal Dawn',
         description:
-          'Calls down a cathedral of solar light, granting all allies a massive Shield (320% ATK) and Defense +35% for 6s while dealing 180% ATK to frontline foes.',
+          'Raises a team barrier: at impact, each surviving ally locked at cast start gains a 320% ATK shield and +35% Defense for 6s. Shields add to existing protection and last until depleted or death. Deals no damage; hard control interrupts preparation.',
         cooldownMs: 0,
-        damageMultiplier: 1.8,
+        damageMultiplier: 0,
         targetType: 'all_allies',
         shieldMultiplier: 3.2,
         buffType: 'def_up',
@@ -74,7 +74,7 @@ const CORE_12_RAW: HeroDefinition[] = [
       passive: {
         name: 'Sacred Bulwark',
         description:
-          'Begins every battle with a Solar Barrier equal to 18% Max HP and increases base Defense by 20%.',
+          'Increases Max HP by 15%, Attack by 5% and Defense by 20%. Begins battle with one personal ward equal to 18% of computed Max HP; it does not refresh automatically.',
         bonusHpPct: 0.15,
         bonusAtkPct: 0.05,
         bonusDefPct: 0.2,
@@ -1611,6 +1611,10 @@ function mapRepoHeroToDefinition(entry: RepoCatalogEntry): HeroDefinition {
         targetType: 'current_target',
         vfxColor: colors.primary,
         vfxShape: isRanged ? 'beam' : 'slash',
+        ...(entry.slug === 'fawkes' ? {
+          name: 'Grave Bolt',
+          description: 'Fires one ranged shot at the locked enemy for 110% ATK at simulation contact. Grants no extra mark, shield or control; hard control before contact cancels the shot.',
+        } : {}),
       },
       active: {
         name: s1?.name || `${entry.name} Tactical Art`,
@@ -1637,6 +1641,21 @@ function mapRepoHeroToDefinition(entry: RepoCatalogEntry): HeroDefinition {
             : undefined,
         vfxColor: colors.accent,
         vfxShape: isRanged ? 'lightning' : 'slash',
+        ...(entry.slug === 'fawkes' ? {
+          name: 'Coffin Seal',
+          description: 'Locks one eligible non-boss enemy and isolates them for 3s at contact. The captive remains alive, cannot act or receive skills, and returns in place on expiry or Fawkes death. Hard control before contact cancels capture. Deals no damage or slow.',
+          damageMultiplier: 0, targetType: 'current_target' as const,
+          ccType: 'isolation' as const, ccDurationMs: 3000,
+        } : {}),
+        ...(entry.slug === 'raine' ? {
+          description: 'Fires at one locked enemy for 185% ATK at impact and marks them for 6s. Current-target allies prioritize the living marked enemy; hard control interrupts preparation. Does not heal.',
+          targetType: 'current_target' as const, healMultiplier: undefined, markDurationMs: 6000,
+        } : {}),
+        ...(entry.slug === 'estrilda' ? {
+          description: 'Lowers her lance, then charges toward a locked contact point. Deals 185% ATK and knocks the locked enemy back only if still within contact range. Hard control interrupts the charge.',
+          charge: { activationRangePx: 360, maxDistancePx: 320, stopDistancePx: 60, contactRangePx: 90 },
+          ccType: 'knockback' as const, ccDurationMs: 350,
+        } : {}),
       },
       ultimate: {
         name: s0?.name || `Awakening of ${entry.name}`,
@@ -1664,6 +1683,18 @@ function mapRepoHeroToDefinition(entry: RepoCatalogEntry): HeroDefinition {
         buffMagnitude: 0.3,
         vfxColor: colors.primary,
         vfxShape: 'nova',
+        ...(entry.slug === 'fawkes' ? {
+          name: 'Purification',
+          description: 'At contact strips shield HP and Attack, Defense, Speed and Regeneration buffs from each surviving locked available enemy, then deals 250% ATK. Does not remove hostile marks or controls, does not reach isolated captives, and applies no slow. Hard control before contact cancels the pulse.',
+          purgePositiveEffects: true, ccType: undefined, ccDurationMs: undefined,
+        } : {}),
+        ...(entry.slug === 'raine' ? {
+          description: 'Marks one locked enemy for 6s at impact and opens a focus window while Raine is alive. Allied basic hits removing HP grant that attacker up to 5 Energy, at most once per second and three times per window. A new Raine mark replaces the old mark and ends its focus window. Deals no damage, healing or teamwide energy burst.',
+          damageMultiplier: 0, targetType: 'current_target' as const,
+          healMultiplier: undefined, energyGrant: undefined, buffType: undefined,
+          buffDurationMs: undefined, buffMagnitude: undefined, markDurationMs: 6000,
+          focusReward: { durationMs: 6000, energy: 5, cooldownMs: 1000, maxPerAttacker: 3 },
+        } : {}),
       },
       passive: {
         name: entry.sigItem?.name || s2?.name || `${entry.faction} Bloodline`,
@@ -1677,6 +1708,15 @@ function mapRepoHeroToDefinition(entry: RepoCatalogEntry): HeroDefinition {
         bonusCritPct: 0.06,
         bonusLifestealPct: role === 'Continuous Damage' ? 0.12 : 0,
         openingShieldPct: heroClass === 'Tank' ? 0.15 : 0,
+        ...(entry.slug === 'fawkes' ? {
+          name: 'Grave Resolve',
+          description: 'Increases Max HP, Attack and Defense by 8% and Critical Chance by 6%. Once every 8s, reduces one incoming hostile stun, silence, slow or petrify duration by 25%. Does not prevent cast interruption, isolation or displacement, and does not grant team immunity.',
+          controlResistance: { reductionPct: 0.25, cooldownMs: 8000 },
+        } : {}),
+        ...(entry.slug === 'raine' ? {
+          description: 'Increases Max HP, Attack and Defense by 8% and Critical Chance by 6%. When an enemy bearing her live mark is defeated, grants each living teammate up to 10 Energy once for that enemy; Raine must be alive. No healing or free attacks.',
+          markedDefeatEnergy: 10,
+        } : {}),
       },
     },
     lore:

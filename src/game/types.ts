@@ -20,19 +20,34 @@ export type CrowdControlType =
   | 'silence'
   | 'slow'
   | 'knockback'
-  | 'petrify';
+  | 'petrify'
+  | 'isolation';
 
 export type BuffType = 'shield' | 'atk_up' | 'def_up' | 'spd_up' | 'regen';
 
-export type StatusEffectType = CrowdControlType | BuffType;
+export type StatusEffectType = CrowdControlType | BuffType | 'mark';
 
 export interface StatusEffectInstance {
   id: string;
   type: StatusEffectType;
   durationMs: number;
   remainingMs: number;
+  /** Absolute simulation expiry for marker statuses; avoids aging on their application tick. */
+  expiresAtMs?: number;
+  /** Source cast retained for a later isolation-return event. */
+  castId?: number;
   magnitude: number; // e.g. shield HP, or percentage modifier (0.35 = 35%)
   sourceUnitId: string;
+}
+
+/** Isolation is living captivity, never a death or an ordinary action-only stun. */
+export function isUnitIsolated(unit: Pick<BattleUnitRuntime, 'isAlive' | 'statusEffects'>): boolean {
+  return unit.isAlive && unit.statusEffects.some(status => status.type === 'isolation' && status.remainingMs > 0);
+}
+
+/** Whether a living unit can be selected for a new action or incoming skill. */
+export function isUnitAvailable(unit: Pick<BattleUnitRuntime, 'isAlive' | 'statusEffects'>): boolean {
+  return unit.isAlive && !isUnitIsolated(unit);
 }
 
 export type SkillTargetType =
@@ -50,12 +65,22 @@ export interface HeroSkillSpec {
   cooldownMs: number; // 0 for basic attack / passive / ultimate (ultimate uses 100 energy)
   damageMultiplier: number; // % of ATK
   targetType: SkillTargetType;
+  /** Independent enemy scope for mixed allied-support/offensive skills. Frontline is strict. */
+  damageTargetType?: 'all_enemies' | 'frontline_enemies' | 'current_target' | 'backline_enemy';
+  /** Simulation movement toward a point locked at cast start; contact must still be in range. */
+  charge?: { activationRangePx: number; maxDistancePx: number; stopDistancePx: number; contactRangePx: number };
   healMultiplier?: number; // % of ATK healed
   shieldMultiplier?: number; // % of maxHP or ATK as shield
   lifestealPct?: number; // 0..1 fraction of damage restored as HP
   energyGrant?: number; // bonus energy given to allies/self
+  /** Marks one enemy at impact; current-target teammates may focus the live marked enemy. */
+  markDurationMs?: number;
+  /** Finite basic-hit energy opportunities per attacker; never generates another attack. */
+  focusReward?: { durationMs: number; energy: number; cooldownMs: number; maxPerAttacker: number };
   ccType?: CrowdControlType;
   ccDurationMs?: number;
+  /** Remove explicit positive status categories and shield HP at contact, before damage. */
+  purgePositiveEffects?: boolean;
   buffType?: BuffType;
   buffDurationMs?: number;
   buffMagnitude?: number;
@@ -115,6 +140,10 @@ export interface HeroDefinition {
       bonusCritPct: number;
       bonusLifestealPct: number;
       openingShieldPct: number;
+      /** Energy to each living teammate once per enemy defeated while this source's mark is live. */
+      markedDefeatEnergy?: number;
+      /** Bounded hostile control resistance; isolation/displacement are never shortened. */
+      controlResistance?: { reductionPct: number; cooldownMs: number };
     };
   };
   lore: string;
@@ -227,6 +256,30 @@ export interface CampaignStageDefinition {
   };
 }
 
+/** Simulation-owned action markers; hit offsets include projectile/charge travel. */
+export interface CombatTimeline {
+  skillId: string;
+  prepareMs: number;
+  releaseMs: number;
+  hits: readonly { atMs: number; damageShare: number }[];
+  durationMs: number;
+  targetPolicy: 'lock-at-cast';
+  cancelPolicy: 'death-or-hard-control';
+}
+
+export interface CombatCastState {
+  castId: number;
+  skillId: string;
+  startedAtMs: number;
+  skillSlot: 'basic' | 'active' | 'ultimate';
+  timeline: CombatTimeline;
+  targetIds: string[];
+  /** Separately locked enemies for an allied-support cast with an offensive component. */
+  damageTargetIds?: string[];
+  /** Immutable origin and destination used for simulation-owned charge interpolation. */
+  chargePath?: { from: { x: number; y: number }; to: { x: number; y: number }; contactRangePx: number };
+}
+
 export interface CombatEvent {
   id: number;
   timestampMs: number;
@@ -240,7 +293,15 @@ export interface CombatEvent {
     | 'crowd_control'
     | 'buff'
     | 'knockback'
-    | 'death';
+    | 'death'
+    | 'cast_release'
+    | 'cast_cancelled'
+    | 'cast_complete'
+    | 'mark_applied'
+    | 'isolation_end'
+    | 'dispel'
+    | 'control_resisted'
+    | 'energy_gain';
   sourceId: string;
   sourceName: string;
   targetId?: string;
@@ -249,7 +310,20 @@ export interface CombatEvent {
   /** Originating slot and cast event ID; optional for external or legacy events. */
   skillSlot?: 'basic' | 'active' | 'ultimate' | 'passive';
   castId?: number;
+  skillId?: string;
+  hitIndex?: number;
+  timeline?: CombatTimeline;
+  cancelReason?: 'death' | 'control' | 'target-lost';
+  /** Effective HP change for damage/heal; applied shield amount for shield events. */
   value?: number;
+  /** Post-mitigation attempted damage or requested healing before HP caps. */
+  requestedValue?: number;
+  absorbed?: number;
+  /** Dispel accounting only: removed protection is not HP damage or absorption. */
+  removedShieldHp?: number;
+  removedBuffCount?: number;
+  overkill?: number;
+  overheal?: number;
   isCrit?: boolean;
   ccType?: CrowdControlType;
   buffType?: BuffType;
@@ -293,6 +367,7 @@ export interface BattleUnitRuntime {
   activeSkillCooldownMs: number;
   activeSkillMaxCooldownMs: number;
   actionAnimTimerMs: number;
+  currentCast?: CombatCastState;
   lastActionType: 'idle' | 'move' | 'basic' | 'skill' | 'ultimate' | 'hit' | 'dead';
   targetInstanceId: string | null;
   statusEffects: StatusEffectInstance[];

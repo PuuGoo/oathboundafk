@@ -1,7 +1,8 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import { getSpriteFrame, resolveSpriteClip, type OathboundSpriteSpec } from './oathboundSprites';
 import presentation from './spritePresentation.json';
-import type { BattleUnitRuntime } from './types';
+import type { BattleUnitRuntime, CombatTimeline } from './types';
+import { getTimelineVisualPhase } from './skillTimelines';
 
 export type SpriteActionStyle = Exclude<keyof typeof presentation.action.choreography, 'anticipationEnd' | 'releaseEnd'>;
 
@@ -14,6 +15,7 @@ export interface SpriteActor {
   actionKind: 'basic' | 'skill' | 'ultimate' | 'hit' | '';
   actionDuration: number;
   actionStyle?: SpriteActionStyle;
+  timeline?: CombatTimeline;
 }
 
 /** Selects distinct authored skill rows when available; static sources retain their real fallback. */
@@ -29,7 +31,7 @@ export function selectSpriteActionClip(spec: OathboundSpriteSpec | undefined, ki
 }
 
 /** Starts a visible action without allowing basic/hit events to interrupt a skill's authored frames. */
-export function startSpriteAction(actor: SpriteActor, kind: Exclude<SpriteActor['actionKind'], ''>, spec?: OathboundSpriteSpec, shape = '', style?: SpriteActionStyle, preferredClip?: string): boolean {
+export function startSpriteAction(actor: SpriteActor, kind: Exclude<SpriteActor['actionKind'], ''>, spec?: OathboundSpriteSpec, shape = '', style?: SpriteActionStyle, preferredClip?: string, timeline?: CombatTimeline): boolean {
   const priority = { '': 0, hit: 0, basic: 1, skill: 2, ultimate: 3 };
   if (actor.actionRemaining > 0 && priority[kind] < priority[actor.actionKind]) return false;
   if (kind === 'hit' && actor.actionRemaining > 0) return false;
@@ -39,14 +41,16 @@ export function startSpriteAction(actor: SpriteActor, kind: Exclude<SpriteActor[
     kind === 'hit' ? presentation.action.hitSeconds : presentation.action.basicSeconds;
   actor.action = clip; actor.clip = clip; actor.age = 0; actor.actionKind = kind;
   actor.actionStyle = kind === 'skill' || kind === 'ultimate' ? style : undefined;
-  actor.actionDuration = actor.actionRemaining = Math.max(minimum, authored ? authored.count / authored.fps : 0);
+  actor.timeline = timeline;
+  actor.actionDuration = actor.actionRemaining = timeline ? timeline.durationMs / 1000 :
+    Math.max(minimum, authored ? authored.count / authored.fps : 0);
   return true;
 }
 
 /** Cosmetic recoil/lunge only: simulation position and sorting remain unchanged. */
 export function getSpriteActionPose(actor: SpriteActor, facing: number, reducedMotion: boolean) {
   if (reducedMotion || actor.actionRemaining <= 0 || !actor.actionDuration) return { x: 0, y: 0, rotation: 0, scale: 1 };
-  const progress = Math.min(1, actor.age / actor.actionDuration);
+  const progress = actor.timeline ? getTimelineVisualPhase(actor.timeline, actor.age) : Math.min(1, actor.age / actor.actionDuration);
   const pulse = Math.sin(Math.PI * progress);
   const ultimate = actor.actionKind === 'ultimate';
   if (actor.actionStyle && (actor.actionKind === 'skill' || ultimate)) {
@@ -80,7 +84,7 @@ export function createSpriteActor(_unit: BattleUnitRuntime): SpriteActor {
 /** Advances authored frame clocks, without inventing movement for missing source clips. */
 export function advanceSpriteActor(actor: SpriteActor, unit: BattleUnitRuntime, seconds: number): void {
   const dt = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-  const controlled = unit.isAlive && unit.statusEffects.some(s => s.type === 'stun' || s.type === 'petrify');
+  const controlled = unit.isAlive && unit.statusEffects.some(s => s.type === 'stun' || s.type === 'petrify' || s.type === 'isolation');
   actor.flash = Math.max(0, actor.flash - dt);
   if (controlled) return;
   const clip = !unit.isAlive || unit.hp <= 0 ? 'death' : actor.actionRemaining > 0 ? actor.action :

@@ -1,4 +1,5 @@
 // PROTOTYPE - NOT FOR PRODUCTION
+import { getTimelineVisualPhase } from './skillTimelines';
 import profiles from './spriteSkillArt.json';
 import type { SpriteEffect } from './spriteBattleEffects';
 import { projectSpritePosition } from './spriteBattleRenderer';
@@ -24,7 +25,7 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
   const art = getSpriteSkillArt(effect.sourceHeroId);
   if (!art || effect.basic || effect.kind === 'death' || effect.kind === 'control') return false;
   const scale = Math.min(width / 480, height / 680);
-  const p = Math.max(0, Math.min(1, effect.age / effect.duration));
+  const p = effect.timeline ? getTimelineVisualPhase(effect.timeline, effect.age) : Math.max(0, Math.min(1, effect.age / effect.duration));
   const source = projectSpritePosition(effect.source.x, effect.source.y, width, height);
   const target = projectSpritePosition(effect.target.x, effect.target.y, width, height);
   const ax = source.x, ay = source.y - 53 * scale, bx = target.x, by = target.y - 48 * scale;
@@ -123,6 +124,37 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
     }
     ctx.restore();
   };
+  if (effect.sourceHeroId === 'fawkes' && effect.kind === 'cast' && effect.ultimate && !effect.support) {
+    // Purification is an open traveling seal, never another captivity silhouette.
+    // The separate real dispel event owns broken-buff feedback at every affected recipient.
+    const t = reducedMotion ? 1 : travel;
+    const x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+    const charge = Math.min(1, p / 0.18), release = Math.max(0, Math.min(1, (p - 0.5) / 0.3));
+    const r = (14 + charge * 5 + (reducedMotion ? 0 : release * 5)) * scale;
+    ctx.save(); ctx.translate(x, y); ctx.globalAlpha *= fade * 0.8;
+    ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, 1.6 * scale); ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      const split = reducedMotion ? 0 : release * r * 0.25;
+      ctx.strokeStyle = art.primary;
+      path([[side * (r * 0.3 + split), -r * 0.8], [side * (r * 0.65 + split), -r * 0.8],
+        [side * (r + split), 0], [side * (r * 0.65 + split), r * 0.8], [side * (r * 0.3 + split), r * 0.8]]);
+      ctx.strokeStyle = art.accent;
+      path([[side * r * 0.2, -r * 0.3], [side * r * 0.45, 0], [side * r * 0.2, r * 0.3]]);
+      if (!lowQuality && !reducedMotion && p >= 0.18 && p < 0.5)
+        path([[-side * r * 0.3, -r * 0.95], [-side * r * 0.55, -r * 1.1]]);
+    }
+    ctx.restore(); return true;
+  }
+  if (effect.kind === 'mark' || (effect.sourceHeroId === 'raine' && effect.kind === 'cast' && effect.ultimate && !effect.support)) {
+    // Mark-only targeting is not a bullet barrage. The persistent status owns its lifetime.
+    const r = 14 * scale;
+    const preparing = effect.kind === 'cast' && !reducedMotion && p < 0.18;
+    ctx.save(); ctx.translate(preparing ? ax : bx, preparing ? ay : by); ctx.globalAlpha *= fade;
+    ctx.strokeStyle = art.primary; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.shadowBlur = 0;
+    for (const x of [-1, 1]) for (const y of [-1, 1])
+      path([[x * r, y * r * 0.45], [x * r, y * r], [x * r * 0.45, y * r]]);
+    ctx.restore(); return true;
+  }
   ctx.save();
   ctx.globalAlpha *= fade;
   ctx.strokeStyle = art.primary; ctx.fillStyle = art.primary;
@@ -1178,6 +1210,17 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
       ctx.restore(); ctx.restore(); return true;
     }
     if (art.motif === 'crossfire') {
+      if (effect.sourceHeroId === 'walker' && !effect.ultimate) {
+        // The actual stock strike settles as one open contact, never an extra volley or hit.
+        const settle = Math.max(0, Math.min(1, (p - 0.66) / 0.34));
+        const size = radius * (0.38 - settle * 0.12);
+        ctx.save(); ctx.translate(bx, by); ctx.rotate(Math.atan2(by - ay, bx - ax)); ctx.shadowBlur = 0;
+        ctx.strokeStyle = art.primary;
+        path([[-size * 0.25, -size * 0.65], [size * 0.35, 0], [-size * 0.25, size * 0.65]]);
+        ctx.strokeStyle = art.accent;
+        for (const side of [-1, 1]) path([[-size * 0.55, side * size * 0.25], [-size * 0.85, side * size * 0.45]]);
+        ctx.restore(); ctx.restore(); return true;
+      }
       // Gunfire arrives along the actual shot bearing, never as a radial magic explosion.
       const count = lowQuality ? effect.ultimate ? 3 : 2 : effect.ultimate ? 5 : 3;
       const size = r * 0.35;

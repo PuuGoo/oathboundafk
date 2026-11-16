@@ -1,14 +1,20 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type { BattleUnitRuntime, CombatEvent, HeroSkillSpec, SkillTargetType } from './types';
+import { isUnitAvailable } from './types';
 import { projectSpritePosition } from './spriteBattleRenderer';
 import presentation from './spritePresentation.json';
+import { getTimelineVisualPhase } from './skillTimelines';
+import type { CombatTimeline } from './types';
 import { drawSpriteSkillArt, getSpriteSkillArt } from './spriteSkillArt';
 
 export interface SpriteEffect {
   id: number;
+  castId?: number;
+  startedAtMs?: number;
+  timeline?: CombatTimeline;
   sourceHeroId: string;
   sourceTeam: BattleUnitRuntime['team'];
-  kind: 'cast' | 'impact' | 'heal' | 'shield' | 'control' | 'death';
+  kind: 'cast' | 'impact' | 'heal' | 'shield' | 'control' | 'death' | 'mark' | 'isolation-return' | 'purge' | 'resist';
   shape: HeroSkillSpec['vfxShape'];
   color: string;
   ultimate: boolean;
@@ -38,10 +44,10 @@ export function resolveSpriteEffectTarget(event: CombatEvent, entries: readonly 
   const outcomes = entries.filter(e => e.sourceId === event.sourceId && e.targetId && !casts.includes(e.type) &&
     (event.castId !== undefined ? e.castId === event.castId :
       e.id > event.id && (!nextCast || e.id < nextCast.id) && e.skillName === event.skillName));
-  const result = outcomes.find(e => support ? ['heal', 'shield', 'buff'].includes(e.type) : ['damage', 'crowd_control', 'knockback'].includes(e.type));
+  const result = outcomes.find(e => support ? ['heal', 'shield', 'buff'].includes(e.type) : ['damage', 'crowd_control', 'knockback', 'mark_applied'].includes(e.type));
   if (result) return units.find(u => u.instanceId === result.targetId) || source;
   if (support) return targetType === 'lowest_hp_ally' ?
-    units.filter(u => u.isAlive && u.team === source.team).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || source : source;
+    units.filter(u => isUnitAvailable(u) && u.team === source.team).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || source : source;
   return units.find(u => u.instanceId === (event.targetId || source.targetInstanceId)) || source;
 }
 
@@ -55,7 +61,9 @@ export function createSpriteEffect(event: CombatEvent, source: BattleUnitRuntime
   const cast = ['basic_attack', 'active_skill', 'ultimate_cast'].includes(event.type);
   const kind: SpriteEffect['kind'] | undefined = cast ? 'cast' : event.type === 'damage' ? 'impact' :
     event.type === 'heal' ? 'heal' : event.type === 'shield' || event.type === 'buff' ? 'shield' :
-    event.type === 'crowd_control' ? 'control' : event.type === 'death' ? 'death' : undefined;
+    event.type === 'crowd_control' ? 'control' : event.type === 'mark_applied' ? 'mark' : event.type === 'death' ? 'death' :
+    event.type === 'isolation_end' && target.isAlive ? 'isolation-return' : event.type === 'dispel' ? 'purge' :
+    event.type === 'control_resisted' ? 'resist' : undefined;
   if (!kind) return;
   const skillSlot = event.type === 'ultimate_cast' ? 'ultimate' : event.type === 'active_skill' ? 'active' :
     event.type === 'basic_attack' ? 'basic' : event.skillSlot;
@@ -63,21 +71,26 @@ export function createSpriteEffect(event: CombatEvent, source: BattleUnitRuntime
   const support = kind === 'heal' || kind === 'shield' || (cast && source.team === target.team);
   const recovery = event.type === 'heal' && event.skillName === 'Lifesteal' && source.instanceId === target.instanceId &&
     Number.isFinite(event.value) && event.value! > 0 ? 'lifesteal' : undefined;
-  const duration = recovery ? presentation.effects.recoverySeconds : cast ? ultimate ? presentation.effects.ultimateSeconds : basic ? presentation.effects.basicSeconds : presentation.effects.skillSeconds :
+  const duration = cast && event.timeline ? event.timeline.durationMs / 1000 : recovery ? presentation.effects.recoverySeconds : cast ? ultimate ? presentation.effects.ultimateSeconds : basic ? presentation.effects.basicSeconds : presentation.effects.skillSeconds :
     kind === 'impact' ? presentation.effects.impactSeconds : presentation.effects.supportSeconds;
-  return { id: event.id, sourceHeroId: source.heroId, sourceTeam: source.team, kind, shape: event.vfxShape || (source.isRanged ? 'arrow' : 'slash'),
+  return { id: event.id, castId: event.castId, startedAtMs: cast && event.timeline ? event.timestampMs : undefined,
+    timeline: cast ? event.timeline : undefined,
+    sourceHeroId: source.heroId, sourceTeam: source.team, kind, shape: event.vfxShape || (source.isRanged ? 'arrow' : 'slash'),
     color: kind === 'heal' ? '#6dffc2' : kind === 'shield' ? '#9edfff' : event.vfxColor || '#ffdc84',
     ultimate, basic, skillSlot, support, supportBuff: event.type === 'buff' ? event.buffType : undefined,
     recovery, ccType: event.type === 'crowd_control' ? event.ccType : undefined,
     age: 0, duration, source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y }, targetId: target.instanceId };
 }
 
-/** Reports live allied active casts, optionally restricted to a normalized [start, end) phase. */
+/** Reports live allied active casts in the same authored [start, end) phase used for drawing. */
 export function getActiveSkillSources(effects: readonly SpriteEffect[], phaseWindow: readonly [number, number] = [0, 1]): string[] {
-  return [...new Set(effects.filter(effect => effect.sourceTeam === 'ally' && effect.kind === 'cast' && effect.skillSlot === 'active' &&
-    Number.isFinite(effect.age) && Number.isFinite(effect.duration) && effect.duration > 0 && effect.age > 0 && effect.age < effect.duration &&
-    effect.age / effect.duration >= phaseWindow[0] && effect.age / effect.duration < phaseWindow[1])
-    .map(effect => effect.sourceHeroId))];
+  return [...new Set(effects.filter(effect => {
+    if (effect.sourceTeam !== 'ally' || effect.kind !== 'cast' || effect.skillSlot !== 'active' ||
+      !Number.isFinite(effect.age) || !Number.isFinite(effect.duration) || effect.duration <= 0 ||
+      effect.age <= 0 || effect.age >= effect.duration) return false;
+    const phase = effect.timeline ? getTimelineVisualPhase(effect.timeline, effect.age) : effect.age / effect.duration;
+    return phase >= phaseWindow[0] && phase < phaseWindow[1];
+  }).map(effect => effect.sourceHeroId))];
 }
 
 /** Reports only live allied active-skill damage accents, never casts or support feedback. */
@@ -141,6 +154,63 @@ export function drawSpriteEffects(ctx: CanvasRenderingContext2D, effects: readon
     ctx.closePath(); ctx.fill();
   };
   for (const effect of effects) {
+    if (effect.kind === 'purge' || effect.kind === 'resist') {
+      if (layer === 'ground') continue;
+      const p = Math.max(0, Math.min(1, effect.age / effect.duration));
+      const point = projectSpritePosition(effect.target.x, effect.target.y, width, height);
+      const expansion = reducedMotion ? 1 : p * p * (3 - 2 * p);
+      const r = (effect.kind === 'purge' ? 14 + expansion * 8 : 11) * scale;
+      ctx.save(); ctx.translate(point.x, point.y - 48 * scale);
+      ctx.globalAlpha *= Math.min(1, p * 12) * Math.min(1, (1 - p) * 4) * 0.8;
+      ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, 1.5 * scale);
+      if (effect.kind === 'purge') {
+        // Split seal fragments acknowledge a buff actually removed, never an extra hit or prison.
+        ctx.strokeStyle = '#b7daf2';
+        for (const side of [-1, 1]) {
+          ctx.beginPath(); ctx.moveTo(side * r * 0.25, -r * 0.8); ctx.lineTo(side * r * 0.65, -r * 0.8);
+          ctx.lineTo(side * r, 0); ctx.lineTo(side * r * 0.65, r * 0.8); ctx.lineTo(side * r * 0.25, r * 0.8); ctx.stroke();
+          ctx.strokeStyle = '#e6c897'; line(side * r * 0.25, -r * 0.15, side * r * 0.6, -r * 0.4);
+          ctx.strokeStyle = '#b7daf2';
+          if (!lowQuality) line(side * r * 1.1, -r * 0.2, side * r * 1.3, -r * 0.45);
+        }
+      } else {
+        // A compact broken shackle means shorter control, not immunity or shield HP.
+        ctx.strokeStyle = '#e6c897';
+        ctx.beginPath(); ctx.arc(-r * 0.45, 0, r * 0.42, -Math.PI * 0.7, Math.PI * 0.7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(r * 0.45, 0, r * 0.42, Math.PI * 0.3, Math.PI * 1.7); ctx.stroke();
+        ctx.strokeStyle = '#b7daf2';
+        line(-r * 0.15, -r * 0.65, r * 0.05, -r * 0.2);
+        line(-r * 0.05, r * 0.2, r * 0.15, r * 0.65);
+        if (!lowQuality) { line(-r * 0.9, -r * 0.7, -r * 1.1, -r * 0.9); line(r * 0.9, r * 0.7, r * 1.1, r * 0.9); }
+      }
+      ctx.restore(); continue;
+    }
+    if (effect.kind === 'isolation-return') {
+      if (layer === 'ground') continue;
+      const p = Math.max(0, Math.min(1, effect.age / effect.duration));
+      const point = projectSpritePosition(effect.target.x, effect.target.y, width, height);
+      const opening = reducedMotion ? 1 : p * p * (3 - 2 * p);
+      const gap = (16 + opening * 25) * scale;
+      ctx.save(); ctx.translate(point.x, point.y - 45 * scale);
+      ctx.globalAlpha *= (1 - p) * 0.8; ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, 1.4 * scale);
+      for (const side of [-1, 1]) {
+        ctx.save(); ctx.translate(side * gap, 0);
+        ctx.strokeStyle = '#e6c897';
+        ctx.beginPath(); ctx.moveTo(0, -38 * scale); ctx.lineTo(side * 12 * scale, -38 * scale);
+        ctx.lineTo(side * 21 * scale, -20 * scale); ctx.lineTo(side * 15 * scale, 32 * scale);
+        ctx.lineTo(0, 32 * scale); ctx.closePath(); ctx.stroke();
+        ctx.strokeStyle = '#b7daf2';
+        line(side * 4 * scale, -17 * scale, side * 9 * scale, -7 * scale);
+        line(side * 9 * scale, -7 * scale, side * 4 * scale, 3 * scale);
+        if (!lowQuality) {
+          ctx.strokeStyle = '#9b7b9c';
+          line(side * 5 * scale, -30 * scale, side * 14 * scale, -17 * scale);
+          line(side * 14 * scale, -17 * scale, side * 10 * scale, 24 * scale);
+        }
+        ctx.restore();
+      }
+      ctx.restore(); continue;
+    }
     if (effect.kind === 'control') {
       if (layer === 'ground') continue;
       const p = Math.max(0, Math.min(1, effect.age / effect.duration));
@@ -177,6 +247,12 @@ export function drawSpriteEffects(ctx: CanvasRenderingContext2D, effects: readon
           }
           break;
         }
+        case 'isolation':
+          ctx.beginPath(); ctx.moveTo(-r * 0.4, -r * 0.8); ctx.lineTo(r * 0.4, -r * 0.8);
+          ctx.lineTo(r * 0.65, -r * 0.4); ctx.lineTo(r * 0.5, r * 0.75);
+          ctx.lineTo(-r * 0.5, r * 0.75); ctx.lineTo(-r * 0.65, -r * 0.4); ctx.closePath(); ctx.stroke();
+          line(0, -r * 0.5, 0, r * 0.3); line(-r * 0.25, -r * 0.15, r * 0.25, -r * 0.15);
+          break;
         case 'petrify':
           ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.lineTo(r * 0.65, -r * 0.2);
           ctx.lineTo(r * 0.5, r * 0.7); ctx.lineTo(-r * 0.5, r * 0.7);
@@ -226,7 +302,9 @@ export function drawSpriteEffects(ctx: CanvasRenderingContext2D, effects: readon
       const a = projectSpritePosition(effect.source.x, effect.source.y, width, height);
       const b = projectSpritePosition(effect.target.x, effect.target.y, width, height);
       const ay = a.y - 52 * scale, by = b.y - 48 * scale;
-      const travel = Math.max(0, Math.min(1, (p - 0.12) / 0.38));
+      const travel = effect.timeline ? Math.max(0, Math.min(1,
+        (effect.age * 1000 - effect.timeline.releaseMs) / (effect.timeline.hits[0].atMs - effect.timeline.releaseMs))) :
+        Math.max(0, Math.min(1, (p - 0.12) / 0.38));
       const length = Math.min(12 * scale, Math.hypot(b.x - a.x, by - ay) * 0.2);
       ctx.save(); ctx.translate(a.x + (b.x - a.x) * travel, ay + (by - ay) * travel);
       ctx.rotate(Math.atan2(by - ay, b.x - a.x));
@@ -274,7 +352,9 @@ export function drawSpriteEffects(ctx: CanvasRenderingContext2D, effects: readon
           circle(a.x, ay, radius * (0.25 + p));
           star(a.x, ay, 10 * scale);
         }
-        const travel = Math.max(0, Math.min(1, (p - 0.12) / 0.38));
+        const travel = effect.timeline ? Math.max(0, Math.min(1,
+        (effect.age * 1000 - effect.timeline.releaseMs) / (effect.timeline.hits[0].atMs - effect.timeline.releaseMs))) :
+        Math.max(0, Math.min(1, (p - 0.12) / 0.38));
         const tx = a.x + (b.x - a.x) * travel, ty = ay + (by - ay) * travel;
         ctx.globalAlpha *= p < 0.12 ? 0.35 : 1;
         switch (effect.shape) {

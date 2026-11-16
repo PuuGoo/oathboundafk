@@ -2091,7 +2091,12 @@ export const HeroUltimateBar: React.FC<{
   onAutoUpgrade,
   onTriggerHeroUlt,
   onOpenFormation,
-}) => (
+}) => {
+  const comboReady = formation.some(heroId => heroId && getUltimateReadiness(
+    liveSnapshot?.units.find(unit => unit.team === 'ally' && unit.heroId === heroId),
+    liveSnapshot?.status
+  ).canCast);
+  return (
   <div
     data-testid="battle-hero-ultimate-bar"
     className="pointer-events-auto w-full px-2 py-1.5 bg-gradient-to-t from-[#1a0f07] via-[#24150a]/95 to-[#160d06]/90 border-t border-[#8c6430] flex flex-col gap-1.5 shrink-0"
@@ -2101,9 +2106,11 @@ export const HeroUltimateBar: React.FC<{
       <button
         type="button"
         data-testid="btn-combo-ultimates"
-        title="Tung tuyệt kỹ tức thì cho các tướng không bị khóa chiêu, không cần đầy năng lượng"
-        aria-label="Combo Ult — tung tuyệt kỹ tức thì cho cả đội, bỏ qua yêu cầu năng lượng"
-        onClick={onTriggerComboUlt}
+        title="Combo Ult — chỉ các tướng đủ điều kiện: còn sống, đầy năng lượng và không bị khóa chiêu"
+        aria-label="Combo Ult — chỉ các tướng đủ điều kiện; yêu cầu đầy năng lượng và không bị khóa chiêu"
+        aria-disabled={!comboReady}
+        disabled={!comboReady}
+        onClick={() => { if (comboReady) onTriggerComboUlt(); }}
         className="flex items-center justify-center gap-1 py-1 px-2 rounded-lg bg-gradient-to-b from-[#52351b] to-[#2b1a0c] border border-[#d4af37] text-[#fde047] font-extrabold text-[10px] cursor-pointer shadow min-w-0"
       >
         <IconSysStar className="w-3.5 h-3.5 shrink-0" />
@@ -2172,10 +2179,11 @@ export const HeroUltimateBar: React.FC<{
             type="button"
             data-testid={`ult-card-${hero.id}`}
             data-ultimate-state={readiness.state}
-            aria-label={`${hero.name} — ${readiness.label}. ${readiness.canShowcase ? 'Tung tuyệt kỹ tức thì, không cần đầy năng lượng.' : 'Hiện không thể tung tuyệt kỹ.'}`}
-            title={`${hero.name}: ${readiness.label} · Phím ${idx + 1} hoặc bấm để tung chiêu tức thì`}
-            aria-disabled={!readiness.canShowcase}
-            onClick={() => { if (readiness.canShowcase) onTriggerHeroUlt(hero.id); }}
+            aria-label={`${hero.name} — ${readiness.label}. Yêu cầu đầy năng lượng. ${readiness.canCast ? 'Có thể tung tuyệt kỹ.' : 'Hiện không thể tung tuyệt kỹ.'}`}
+            title={`${hero.name}: ${readiness.label} · Yêu cầu đầy năng lượng · Phím ${idx + 1} hoặc bấm khi sẵn sàng`}
+            aria-disabled={!readiness.canCast}
+            disabled={!readiness.canCast}
+            onClick={() => { if (readiness.canCast) onTriggerHeroUlt(hero.id); }}
             className={`group relative rounded-t-[18px] rounded-b-lg p-1 border-2 transition-all cursor-pointer flex flex-col items-center shadow-lg min-w-0 ${
               !isAlive
                 ? 'bg-[#1a1310] border-stone-700 grayscale opacity-55'
@@ -2225,5 +2233,6 @@ export const HeroUltimateBar: React.FC<{
       })}
     </div>
   </div>
-);
+  );
+};
 

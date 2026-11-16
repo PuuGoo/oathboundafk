@@ -9,7 +9,7 @@ import { createSpriteActor, advanceSpriteActor, drawSpriteActor, projectSpritePo
 import { createSpriteEffect, advanceSpriteEffects, drawSpriteEffects, drawSpriteBattleLayers, type SpriteEffect, resolveSpriteEffectTarget, advancePresentationClock, getActiveSkillSources, getActiveImpactSources } from './spriteBattleEffects';
 import { addCombatText, advanceCombatTexts, layoutCombatTexts } from './spriteCombatText';
 import { addUltimateAnnouncement, advanceUltimateAnnouncements, getUltimateAnnouncementView, type UltimateAnnouncement } from './spriteUltimateAnnouncements';
-import { getSpriteUnitStatus, drawSpriteUnitStatus, layoutSpriteUnitStatuses, drawSpriteShieldStatus, getSpriteUnitOverlayBounds } from './spriteUnitStatus';
+import { getSpriteUnitStatus, drawSpriteUnitStatus, layoutSpriteUnitStatuses, drawSpriteShieldStatus, getSpriteUnitOverlayBounds, drawSpriteMarkStatus, drawSpriteIsolation } from './spriteUnitStatus';
 import { getUltimateReadiness } from './ultimateReadiness';
 import presentation from './spritePresentation.json';
 import type { CombatEvent, TeamFormationSlots } from './types';
@@ -20,10 +20,60 @@ import { createInitialData } from '../store/gameStore';
 import { containDialogFocus } from '../components/dialogFocus';
 import { BattlePauseModal } from '../components/BattlePauseModal';
 import { OATHBOUND_HEROES } from './oathboundHeroes';
+import { getTimelineVisualPhase } from './skillTimelines';
 import { getSpriteSkillArt, drawSpriteSkillArt } from './spriteSkillArt';
 
+/** Sample an authored art phase while retaining simulation timeline markers on the effect. */
+function artPhaseAge(effect: SpriteEffect, phase: number): number {
+  const timeline = effect.timeline;
+  if (!timeline) return effect.duration * phase;
+  const release = timeline.releaseMs, contact = timeline.hits[0].atMs;
+  const time = phase <= 0.18 ? release * phase / 0.18 : phase <= 0.5
+    ? release + (contact - release) * (phase - 0.18) / 0.32
+    : contact + (timeline.durationMs - contact) * (phase - 0.5) / 0.5;
+  return time / 1000;
+}
+
+/** Retain cast starts and collect their delayed outcomes without unrelated fixture actions. */
+function collectChoreographyEvents(sim: BattleSimulation): CombatEvent[] {
+  const events: CombatEvent[] = []; events.push(...sim.consumeEvents());
+  const castIds = new Set(events.filter(event => ['basic_attack', 'active_skill', 'ultimate_cast'].includes(event.type)).map(event => event.id));
+  const pending = () => sim.getUnits().some(unit => unit.currentCast && castIds.has(unit.currentCast.castId));
+  if (!pending()) return events;
+  const frozen = sim.getUnits().map(unit => ({ unit, basic: unit.basicAttackCooldownMs,
+    active: unit.activeSkillCooldownMs, movement: unit.moveSpeedPxPerSec, energy: unit.energy }));
+  try {
+    for (let tick = 0; tick < 80 && pending() && sim.getStatus() === 'running'; tick++) {
+      for (const { unit } of frozen) {
+        unit.basicAttackCooldownMs = Infinity; unit.activeSkillCooldownMs = Infinity;
+        unit.moveSpeedPxPerSec = 0;
+        if (unit.team === 'enemy') { unit.energy = 0; unit.shield = 0; }
+      }
+      sim.step(50); events.push(...sim.consumeEvents());
+    }
+    assert.ok(!pending() || sim.getStatus() !== 'running', 'declared casts must complete within fixture bound');
+    for (const castId of castIds) {
+      const cast = events.find(event => event.id === castId)!;
+      const outcomes = events.filter(event => event.castId === castId && event.type !== cast.type);
+      for (const outcome of outcomes) assert.equal(outcome.sourceId, cast.sourceId);
+      const cancelled = outcomes.find(event => event.type === 'cast_cancelled');
+      // A concurrent ally may legitimately lose its locked victim to Fawkes' real coffin.
+      const isolatedTargetLost = cancelled?.cancelReason === 'target-lost' && sim.getUnits().some(unit =>
+        unit.instanceId === cast.targetId && unit.statusEffects.some(status => status.type === 'isolation'));
+      assert.ok(!cancelled || isolatedTargetLost, `choreography cancellation ${cast.sourceId}/${cast.skillSlot}: ${cancelled?.cancelReason}`);
+    }
+    return events;
+  } finally {
+    for (const state of frozen) {
+      state.unit.basicAttackCooldownMs = state.basic; state.unit.activeSkillCooldownMs = state.active;
+      state.unit.moveSpeedPxPerSec = state.movement;
+      if (state.unit.team === 'enemy') state.unit.energy = state.energy;
+    }
+  }
+}
+
 test('real support cast props follow recipient body depth while attacks and outcomes stay in front', () => {
-  for (const heroId of ['raine', 'rowan', 'rosaline', 'hero_107_peggy', 'hero_68_rigby', 'sonja', 'dawn_oracle', 'celestial_guardian']) for (const slot of ['active', 'ultimate'] as const) {
+  for (const heroId of ['rowan', 'rosaline', 'hero_107_peggy', 'hero_68_rigby', 'sonja', 'dawn_oracle', 'celestial_guardian']) for (const slot of ['active', 'ultimate'] as const) {
     if (slot === 'active' && ['hero_68_rigby', 'celestial_guardian'].includes(heroId)) continue;
     const initial = createInitialData();
     const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
@@ -32,11 +82,14 @@ test('real support cast props follow recipient body depth while attacks and outc
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents(); let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true); entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true); entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
     }
     const cast = entries.find(e => e.sourceId === source.instanceId && e.type === (slot === 'ultimate' ? 'ultimate_cast' : 'active_skill'))!;
@@ -103,11 +156,12 @@ test('all 22 imported heroes route actual active and ultimate choreography throu
       sim.consumeEvents();
       let entries: CombatEvent[] = [];
       if (slot === 'ultimate') {
-        assert.equal(sim.triggerUltimate(source.instanceId, true), true, `${hero.name}: controlled ultimate must execute`);
-        entries = sim.consumeEvents();
+        source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true, `${hero.name}: controlled ultimate must execute`);
+        entries = collectChoreographyEvents(sim);
       } else {
         for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-          sim.step(50); entries = sim.consumeEvents();
+          for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
           if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
         }
       }
@@ -119,7 +173,7 @@ test('all 22 imported heroes route actual active and ultimate choreography throu
       assert.equal(target.team === source.team, supportive, `${hero.name}/${slot}: real target category`);
       const outcomes = entries.filter(event => event.sourceId === source.instanceId && event.castId === cast.id && event.targetId);
       assert.ok(outcomes.some(event => event.targetId === target.instanceId &&
-        (supportive ? ['heal', 'shield', 'buff'] : ['damage', 'crowd_control', 'knockback']).includes(event.type)),
+        (supportive ? ['heal', 'shield', 'buff'] : ['damage', 'crowd_control', 'knockback', 'mark_applied']).includes(event.type)),
         `${hero.name}/${slot}: anchor must be an actual outcome recipient`);
       const effect = createSpriteEffect(cast, source, target)!;
       assert.equal(effect.support, supportive);
@@ -163,7 +217,7 @@ test('active release diagnostics enforce the actual live effect phase rather tha
   const source = fixture(), target = { ...source, instanceId: 'phase-target', team: 'enemy' as const };
   const effect = createSpriteEffect({ id: 1220, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
   for (const [phase, expected] of [[0.12, false], [0.36, true], [0.42, true], [0.56, false], [0.9, false]] as const) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect);
     assert.deepEqual(getActiveSkillSources([effect], [0.36, 0.56]), expected ? [source.heroId] : []);
     assert.deepEqual(effect, before);
@@ -191,7 +245,7 @@ test('active anticipation and arrival diagnostics exclude all other live cast ph
   const source = fixture(), target = { ...source, instanceId: 'phase-window-target', team: 'enemy' as const };
   const effect = createSpriteEffect({ id: 1221, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
   for (const phase of [0.02, 0.06, 0.12, 0.16, 0.42, 0.66, 0.72, 0.82, 0.95]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     for (const window of [[0.06, 0.16], [0.66, 0.82]] as const) {
       const expected = phase >= window[0] && phase < window[1];
       assert.deepEqual(getActiveSkillSources([effect], window), expected ? [source.heroId] : []);
@@ -218,7 +272,7 @@ test('active and ultimate deliveries render distinct finite geometry for every h
     const trace = (ultimate: boolean, reduced: boolean, low: boolean, phase: number) => {
       const effect = createSpriteEffect({ id: 90, timestampMs: 0, type: ultimate ? 'ultimate_cast' : 'active_skill',
         sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const calls: unknown[][] = [];
       const ctx = new Proxy({}, {
         get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
@@ -280,7 +334,8 @@ test('actual Sonja active blessing blooms roses at the allied recipient without 
   sim.consumeEvents();
   let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -290,7 +345,7 @@ test('actual Sonja active blessing blooms roses at the allied recipient without 
   assert.ok(entries.some(event => event.castId === cast.castId && event.type === 'heal' && event.targetId === target.instanceId));
   const effect = createSpriteEffect(cast, source, target)!;
   assert.equal(effect.support, true);
-  effect.age = effect.duration * 0.42;
+  effect.age = artPhaseAge(effect, 0.42);
   const before = structuredClone(effect);
   for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
     const calls: unknown[][] = [];
@@ -320,8 +375,10 @@ test('actual Sonja Gold Roses ultimate uses golden recipient petals on normal LO
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const events = sim.consumeEvents(), cast = events.find(e => e.type === 'ultimate_cast' && e.sourceId === source.instanceId)!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const events = collectChoreographyEvents(sim), cast = events.find(e => e.type === 'ultimate_cast' && e.sourceId === source.instanceId)!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, events, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.equal(target.team, source.team);
@@ -331,7 +388,7 @@ test('actual Sonja Gold Roses ultimate uses golden recipient petals on normal LO
   assert.equal(effect.color, getHeroById(heroId).skills.ultimate.vfxColor);
   assert.notEqual(effect.color, getSpriteSkillArt(heroId)!.primary, 'ultimate palette differs from active pink');
   for (const phase of [0.15, 0.5, 0.85]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     let fillStyle: unknown;
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
@@ -362,17 +419,23 @@ test('actual Rowan Palmer Rosaline and Peggy support casts deliver recipient-loc
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) {
+        enemy.shield = 0; enemy.energy = 0;
+        enemy.basicAttackCooldownMs = Infinity; enemy.activeSkillCooldownMs = Infinity;
+      }
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const active = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
     assert.ok(active, `${heroId}: natural active must occur`);
     const batches = [{ cast: active, entries, skill: getHeroById(heroId).skills.active }];
-    assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-    const ultimateEntries = sim.consumeEvents();
+    source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+    const ultimateEntries = collectChoreographyEvents(sim);
     batches.push({ cast: ultimateEntries.find(event => event.sourceId === source.instanceId && event.type === 'ultimate_cast')!,
       entries: ultimateEntries, skill: getHeroById(heroId).skills.ultimate });
     for (const batch of batches) {
@@ -381,7 +444,7 @@ test('actual Rowan Palmer Rosaline and Peggy support casts deliver recipient-loc
       assert.equal(target.team, source.team);
       assert.ok(batch.entries.some(event => event.castId === batch.cast.castId && event.type === 'heal' && event.targetId === target.instanceId));
       const effect = createSpriteEffect(batch.cast, source, target)!;
-      effect.age = effect.duration * 0.42;
+      effect.age = artPhaseAge(effect, 0.42);
       const before = structuredClone(effect);
       for (const [reduced, low] of [[false, false], [false, true], [true, true]]) {
         const calls: unknown[][] = [];
@@ -405,20 +468,81 @@ test('actual Rowan Palmer Rosaline and Peggy support casts deliver recipient-loc
   }
 });
 
-test('actual Lucius Raine and Rigby allied ultimates use local light rally and barrel signatures', () => {
-  for (const heroId of ['celestial_guardian', 'raine', 'hero_68_rigby']) {
+test('persistent mark badge follows live status duration and rejects dead targets or marking sources', () => {
+  const initial = createInitialData();
+  const sim = new BattleSimulation({ allyFormation: ['raine', null, null, null, null], ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
+  const source = sim.getUnits().find(unit => unit.heroId === 'raine' && unit.team === 'ally')!;
+  source.energy = 100; sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const events = collectChoreographyEvents(sim), mark = events.find(event => event.type === 'mark_applied')!;
+  const target = sim.getUnits().find(unit => unit.instanceId === mark.targetId)!;
+  const before = structuredClone(target), calls: unknown[][] = [];
+  const ctx = new Proxy({}, { get: (_, name) => (...args: unknown[]) => { calls.push([String(name), ...args]); }, set: () => true }) as CanvasRenderingContext2D;
+  assert.equal(drawSpriteMarkStatus(ctx, target, sim.getUnits(), 10, 20, 1), true);
+  assert.ok(calls.some(call => call[0] === 'fillText' && String(call[1]).startsWith('MARK ')));
+  assert.deepEqual(target, before);
+  source.isAlive = false;
+  assert.equal(drawSpriteMarkStatus(ctx, target, sim.getUnits(), 10, 20, 1), false);
+  source.isAlive = true; target.statusEffects.find(status => status.type === 'mark')!.remainingMs = 0;
+  assert.equal(drawSpriteMarkStatus(ctx, target, sim.getUnits(), 10, 20, 1), false);
+  target.statusEffects.find(status => status.type === 'mark')!.remainingMs = 6000; target.isAlive = false;
+  assert.equal(drawSpriteMarkStatus(ctx, target, sim.getUnits(), 10, 20, 1), false);
+});
+
+test('Raine hostile mark-only ultimate draws a compact reticle, never a damage barrage or allied ward', () => {
+  const initial = createInitialData();
+  const sim = new BattleSimulation({ allyFormation: ['raine', null, null, null, null], ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
+  const source = sim.getUnits().find(unit => unit.heroId === 'raine' && unit.team === 'ally')!;
+  sim.consumeEvents(); source.energy = 100;
+  assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const events = collectChoreographyEvents(sim);
+  const cast = events.find(event => event.type === 'ultimate_cast' && event.sourceId === source.instanceId)!;
+  const mark = events.find(event => event.type === 'mark_applied' && event.castId === cast.castId)!;
+  assert.ok(mark);
+  assert.equal(events.some(event => event.castId === cast.castId && ['damage', 'heal', 'shield', 'buff'].includes(event.type)), false);
+  const target = resolveSpriteEffectTarget(cast, events, sim.getUnits(), source, 'current_target');
+  assert.equal(target.instanceId, mark.targetId); assert.notEqual(target.team, source.team);
+  for (const event of [cast, mark]) {
+    const effect = createSpriteEffect(event, source, target)!;
+    assert.ok(effect); assert.equal(effect.support, false);
+    assert.equal(effect.kind, event === cast ? 'cast' : 'mark');
+    for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
+      effect.age = artPhaseAge(effect, 0.74);
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(name), ...args]); return undefined;
+      }, set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
+      assert.equal(drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low), true);
+      const scale = Math.min(390 / 480, 530 / 680), b = projectSpritePosition(target.x, target.y, 390, 530);
+      assert.ok(calls.some(call => call[0] === 'translate' && call[1] === b.x && call[2] === b.y - 48 * scale));
+      assert.equal(calls.some(call => ['rotate', 'fill', 'ellipse', 'createRadialGradient'].includes(String(call[0]))), false);
+      assert.ok(calls.filter(call => call[0] === 'stroke').length >= 4);
+      assert.ok(calls.filter(call => call[0] === 'set' && call[1] === 'shadowBlur').every(call => call[2] === 0));
+      for (const call of calls.filter(call => ['moveTo', 'lineTo'].includes(String(call[0]))))
+        for (const value of call.slice(1)) assert.ok(Math.abs(Number(value)) <= 14 * scale);
+      assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
+test('actual Lucius and Rigby allied ultimates use local light and barrel signatures', () => {
+  for (const heroId of ['celestial_guardian', 'hero_68_rigby']) {
     const initial = createInitialData();
     const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
-    assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-    const events = sim.consumeEvents(), cast = events.find(event => event.type === 'ultimate_cast')!;
+    source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+    const events = collectChoreographyEvents(sim), cast = events.find(event => event.type === 'ultimate_cast')!;
     const target = resolveSpriteEffectTarget(cast, events, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
     assert.equal(target.team, source.team);
     const effect = createSpriteEffect(cast, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const before = structuredClone(effect);
     for (const [reduced, low] of [[false, false], [false, true], [true, true]]) {
       const calls: unknown[][] = [];
@@ -435,22 +559,24 @@ test('actual Lucius Raine and Rigby allied ultimates use local light rally and b
 });
 
 test('actual allied ultimate cast props avoid shared body-sized floor rings and crown ellipses', () => {
-  for (const heroId of ['celestial_guardian', 'raine', 'rowan', 'rosaline', 'hero_68_rigby', 'hero_107_peggy', 'sonja', 'dawn_oracle']) {
+  for (const heroId of ['celestial_guardian', 'rowan', 'rosaline', 'hero_68_rigby', 'hero_107_peggy', 'sonja', 'dawn_oracle']) {
     const initial = createInitialData();
     const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
-    assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-    const events = sim.consumeEvents(), cast = events.find(event => event.type === 'ultimate_cast')!;
+    source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+    const events = collectChoreographyEvents(sim), cast = events.find(event => event.type === 'ultimate_cast')!;
     const target = resolveSpriteEffectTarget(cast, events, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
     assert.equal(target.team, source.team);
     assert.ok(events.some(event => event.castId === cast.castId && event.targetId === target.instanceId &&
       ['heal', 'shield', 'buff'].includes(event.type)), 'actual supported recipient required');
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.15, 0.5, 0.85]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -478,15 +604,15 @@ test('actual Palmer stat buffs retain their type and never imitate a shielding o
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
   const source = sim.getUnits().find(unit => unit.heroId === 'dawn_oracle' && unit.team === 'ally')!;
   sim.consumeEvents();
-  assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const events = sim.consumeEvents(), buffs = events.filter(event => event.type === 'buff');
+  source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const events = collectChoreographyEvents(sim), buffs = events.filter(event => event.type === 'buff');
   assert.equal(buffs.length, sim.getUnits().filter(unit => unit.team === 'ally' && unit.isAlive).length);
   for (const event of buffs) {
     const target = sim.getUnits().find(unit => unit.instanceId === event.targetId)!;
     const effect = createSpriteEffect(event, source, target)!;
     assert.equal(effect.supportBuff, 'atk_up');
     assert.equal(effect.supportBuff, event.buffType);
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const before = structuredClone(effect);
     for (const [reduced, low] of [[false, false], [false, true], [true, true]]) {
       const calls: unknown[][] = [];
@@ -504,8 +630,9 @@ test('actual Palmer stat buffs retain their type and never imitate a shielding o
     }
   }
   const tank = sim.getUnits().find(unit => unit.heroId === 'celestial_guardian' && unit.team === 'ally')!;
-  assert.equal(sim.triggerUltimate(tank.instanceId, true), true);
-  const ward = sim.consumeEvents().find(event => event.type === 'shield')!;
+  tank.energy = 100;
+  assert.equal(sim.triggerUltimate(tank.instanceId), true);
+  const ward = collectChoreographyEvents(sim).find(event => event.type === 'shield')!;
   assert.ok(ward, 'negative control uses an actual tank shield');
   const recipient = sim.getUnits().find(unit => unit.instanceId === ward.targetId)!;
   assert.equal(createSpriteEffect(ward, tank, recipient)!.supportBuff, undefined);
@@ -520,7 +647,9 @@ test('actual opening passive wards retain five distinct compact hero marks on LO
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
-    const wards = sim.consumeEvents().filter(e => e.sourceId === source.instanceId && e.type === 'shield' && e.skillSlot === 'passive');
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+    const wards = collectChoreographyEvents(sim).filter(e => e.sourceId === source.instanceId && e.type === 'shield' && e.skillSlot === 'passive');
     assert.equal(wards.length, 1, 'only the actual initialized passive shield is presented');
     assert.ok(wards[0].value! > 0);
     assert.equal(wards[0].targetId, source.instanceId);
@@ -561,9 +690,9 @@ test('real opening and ultimate shield outcomes use small local crests without r
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === hero.heroId && unit.team === 'ally')!;
-    const opening = sim.consumeEvents().filter(event => event.sourceId === source.instanceId && event.type === 'shield');
-    assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-    const ultimate = sim.consumeEvents().filter(event => event.sourceId === source.instanceId && event.type === 'shield');
+    const opening = collectChoreographyEvents(sim).filter(event => event.sourceId === source.instanceId && event.type === 'shield');
+    source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+    const ultimate = collectChoreographyEvents(sim).filter(event => event.sourceId === source.instanceId && event.type === 'shield');
     openingCount += opening.length; ultimateCount += ultimate.length;
     for (const event of [...opening, ...ultimate]) {
       assert.ok(event.value! > 0);
@@ -602,7 +731,7 @@ test('healing outcomes remain compact recipient accents instead of repeating bod
     const target = { ...source, instanceId: 'healed-ally', x: 320, y: 280 };
     const effect = createSpriteEffect({ id: 1245, timestampMs: 0, type: 'heal', skillSlot: 'ultimate',
       sourceId: source.instanceId, sourceName: source.name, targetId: target.instanceId, value: 100 }, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -654,9 +783,12 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents(); let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
     }
     const cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'active_skill')!; assert.ok(cast);
@@ -665,7 +797,7 @@ test('actual weapon active anticipation keeps its aimed silhouette without a sha
     assert.ok(entries.some(e => e.castId === cast.castId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.08, 0.14, 0.28]) for (const low of [false, true]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -724,9 +856,12 @@ test('actual Lucius offensive anticipation prepares an open shield instead of ro
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents(); let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -736,7 +871,7 @@ test('actual Lucius offensive anticipation prepares an open shield instead of ro
   assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
   const effect = createSpriteEffect(cast, source, target)!;
   for (const phase of [0.08, 0.14]) for (const low of [false, true]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -767,10 +902,13 @@ test('actual Eluard active charge unfolds a caster-local faceted prism without g
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -780,7 +918,7 @@ test('actual Eluard active charge unfolds a caster-local faceted prism without g
     assert.ok(entries.some(event => event.castId === cast.castId && event.type === 'damage' && event.targetId === target.instanceId && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.08, 0.14]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect);
     for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const calls: unknown[][] = [];
@@ -821,10 +959,13 @@ test('actual Eluard active release and arrival retain transparent recipient face
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -833,7 +974,7 @@ test('actual Eluard active release and arrival retain transparent recipient face
     assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId && event.type === 'damage'));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.4, 0.74, 0.92]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect);
     for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const calls: unknown[][] = [];
@@ -869,10 +1010,13 @@ test('actual coffin eye flame and bastion active anticipation has a caster-local
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -880,10 +1024,10 @@ test('actual coffin eye flame and bastion active anticipation has a caster-local
     const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.active.targetType);
     assert.notEqual(target.team, source.team);
     assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId &&
-      ['damage', 'crowd_control', 'knockback'].includes(event.type)), 'anchor is a real affected enemy');
+      ['damage', 'crowd_control', 'knockback', 'mark_applied'].includes(event.type)), 'anchor is a real affected enemy');
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.08, 0.14]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect);
     for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const calls: unknown[][] = [];
@@ -925,7 +1069,7 @@ test('Fawkes and Morrow open distinct recipient-local coffin doors and an eye du
     const source = { ...fixture(), heroId, x: 180, y: 210 };
     const target = { ...source, instanceId: 'rift-recipient', team: 'enemy' as const, x: 740, y: 300 };
     const effect = createSpriteEffect({ id: 1230, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -955,9 +1099,12 @@ test('Belinda and Scarlet anticipation uses a caster-local sun or vortex rather 
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents(); let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -967,7 +1114,7 @@ test('Belinda and Scarlet anticipation uses a caster-local sun or vortex rather 
     assert.ok(entries.some(event => event.castId === cast.castId && event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.08, 0.14]) for (const reduced of [false, true]) for (const low of [false, true]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1001,7 +1148,7 @@ test('Belinda and Scarlet release distinct light and vortex projectiles instead 
     const source = { ...fixture(), heroId, x: reverse ? 740 : 180, y: 210 };
     const target = { ...source, instanceId: 'mage-recipient', team: 'enemy' as const, x: reverse ? 180 : 740, y: 300 };
     const effect = createSpriteEffect({ id: 1200, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const before = structuredClone(effect);
     const trace = (reduced: boolean) => {
       const calls: unknown[][] = [];
@@ -1038,9 +1185,10 @@ test('actual cast ground anticipation respects caller opacity without changing i
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(u => u.heroId === hero.heroId && u.team === 'ally')!;
     sim.consumeEvents(); let entries: CombatEvent[] = [];
-    if (slot === 'ultimate') { assert.equal(sim.triggerUltimate(source.instanceId, true), true); entries = sim.consumeEvents(); }
+    if (slot === 'ultimate') { source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true); entries = collectChoreographyEvents(sim); }
     else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
     }
     const cast = entries.find(e => e.sourceId === source.instanceId && e.type === (slot === 'active' ? 'active_skill' : 'ultimate_cast'))!;
@@ -1084,8 +1232,10 @@ test('actual awakened Thane ultimate converges open wind blades on its real dama
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1095,7 +1245,7 @@ test('actual awakened Thane ultimate converges open wind blades on its real dama
   for (const low of [false, true]) {
     let previousChargeGap = Infinity;
     for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1125,7 +1275,7 @@ test('actual awakened Thane ultimate converges open wind blades on its real dama
     }
     let previousDistance = Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1166,9 +1316,12 @@ test('actual Cecilia active delivers paired small blades along its real opponent
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents(); let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
   }
   const cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'active_skill')!; assert.ok(cast);
@@ -1183,7 +1336,7 @@ test('actual Cecilia active delivers paired small blades along its real opponent
   for (const low of [false, true]) {
     let previousChargeGap = Infinity;
     for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1211,7 +1364,7 @@ test('actual Cecilia active delivers paired small blades along its real opponent
     }
     let previousGap = Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1243,8 +1396,10 @@ test('actual Cecilia ultimate converges open blade pairs rather than a generic r
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1253,7 +1408,7 @@ test('actual Cecilia ultimate converges open blade pairs rather than a generic r
   for (const low of [false, true]) {
     let previous = Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1292,8 +1447,10 @@ test('actual Belinda ultimate release descends as open branched light rays at th
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1303,7 +1460,7 @@ test('actual Belinda ultimate release descends as open branched light rays at th
   for (const low of [false, true]) {
     let previousTip = -Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1331,7 +1488,7 @@ test('actual Belinda ultimate release descends as open branched light rays at th
   for (const low of [false, true]) {
     let previousWidth = 0;
     for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1341,7 +1498,9 @@ test('actual Belinda ultimate release descends as open branched light rays at th
       const a = projectSpritePosition(source.x, source.y, 390, 530);
       assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x, a.y - 53 * scale]]);
       const curves = calls.filter(c => c[0] === 'quadraticCurveTo'); assert.equal(curves.length, 4, 'two open luminous wings');
-      const width = radius * (0.22 + phase / 0.36 * 0.2);
+      const sampledPhase = effect.timeline ? getTimelineVisualPhase(effect.timeline, effect.age) : phase;
+      assert.ok(Math.abs(sampledPhase - phase) < 1e-12, 'inverse sampling preserves authored phase');
+      const width = radius * (0.22 + sampledPhase / 0.36 * 0.2);
       assert.ok(width > previousWidth); previousWidth = width;
       assert.deepEqual(curves[0], ['quadraticCurveTo', -width * 0.5, -radius * 0.28, -width, -radius * 0.24]);
       assert.deepEqual(curves[2], ['quadraticCurveTo', width * 0.5, -radius * 0.28, width, -radius * 0.24]);
@@ -1365,8 +1524,10 @@ test('actual Scarlet ultimate descends as hollow curling vortex strands at its r
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1376,7 +1537,7 @@ test('actual Scarlet ultimate descends as hollow curling vortex strands at its r
   for (const low of [false, true]) {
     let previousY = -Infinity, previousWidth = Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1409,7 +1570,7 @@ test('actual Scarlet ultimate descends as hollow curling vortex strands at its r
   for (const low of [false, true]) {
     let previousReach = Infinity;
     for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1443,8 +1604,10 @@ test('actual Morrow ultimate descends with transparent opening eyes at its real 
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1454,7 +1617,7 @@ test('actual Morrow ultimate descends with transparent opening eyes at its real 
   for (const low of [false, true]) {
     let previousY = -Infinity, previousOpening = 0;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1487,7 +1650,7 @@ test('actual Morrow ultimate descends with transparent opening eyes at its real 
   for (const low of [false, true]) {
     let previousOpening = 0;
     for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1517,8 +1680,10 @@ test('actual Hendrik ultimate drops outlined bastion faces on an enemy while pre
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1531,7 +1696,7 @@ test('actual Hendrik ultimate drops outlined bastion faces on an enemy while pre
   for (const low of [false, true]) {
     let previousY = -Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1563,8 +1728,10 @@ test('actual awakened Eluard ultimate converges four transparent sanctuary facet
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1577,7 +1744,7 @@ test('actual awakened Eluard ultimate converges four transparent sanctuary facet
     const count = low ? 2 : 4;
     let previousChargeSpread = 0;
     for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1604,7 +1771,7 @@ test('actual awakened Eluard ultimate converges four transparent sanctuary facet
     }
     let previousDistance = Infinity, previousWidth = 0;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1641,8 +1808,10 @@ test('actual Eluard ultimate descends through transparent prism faces at its rea
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -1651,7 +1820,7 @@ test('actual Eluard ultimate descends through transparent prism faces at its rea
   for (const low of [false, true]) {
     let previousY = -Infinity, previousWidth = Infinity;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1674,7 +1843,52 @@ test('actual Eluard ultimate descends through transparent prism faces at its rea
   }
 });
 
-test('actual Fawkes ultimate release converges outlined coffin seals without generic orbit diamonds', () => {
+test('Fawkes real purification and resistance outcomes draw distinct bounded pause-safe acknowledgements', () => {
+  const initial = createInitialData();
+  const sim = new BattleSimulation({ allyFormation: ['fawkes', null, null, null, null], ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
+  const source = sim.getUnits().find(unit => unit.team === 'ally')!;
+  const enemies = sim.getUnits().filter(unit => unit.team === 'enemy');
+  for (const unit of sim.getUnits()) { unit.basicAttackCooldownMs = 1e6; unit.activeSkillCooldownMs = 1e6; unit.moveSpeedPxPerSec = 0; unit.energy = 0; }
+  const warded = enemies.find(unit => unit.shield > 0)!; assert.ok(warded);
+  source.energy = 100; sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const cast = sim.consumeEvents().find(event => event.type === 'ultimate_cast')!;
+  sim.step(cast.timeline!.hits[0].atMs);
+  const purge = sim.consumeEvents().find(event => event.type === 'dispel' && event.targetId === warded.instanceId)!;
+  assert.ok(purge); assert.equal(purge.castId, cast.castId); assert.equal(purge.skillSlot, 'ultimate');
+  sim.applyCrowdControl(enemies[0], source, 'stun', 2000);
+  const resistance = sim.consumeEvents().find(event => event.type === 'control_resisted')!;
+  assert.ok(resistance); assert.equal(resistance.castId, undefined); assert.equal(resistance.skillSlot, 'passive');
+  const signatures = new Set<string>();
+  for (const [event, recipient, kind] of [[purge, warded, 'purge'], [resistance, source, 'resist']] as const) {
+    const effect = createSpriteEffect(event, source, recipient)!;
+    assert.ok(effect, `${kind} requires an actual event-backed effect`); assert.equal(effect.kind, kind);
+    assert.equal(effect.targetId, recipient.instanceId); assert.equal(effect.ccType, undefined);
+    assert.equal(effect.basic, false); assert.equal(effect.support, false);
+    effect.age = effect.duration * 0.3;
+    for (const low of [false, true]) for (const reduced of [false, true]) {
+      const trace = (layer: 'ground' | 'front') => {
+        const calls: unknown[][] = [];
+        const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+          calls.push([String(key), ...args]); return undefined;
+        }, set: (_, key, value) => { calls.push(['set', String(key), value]); return true; } }) as CanvasRenderingContext2D;
+        drawSpriteEffects(ctx, [effect], 390, 530, reduced, layer, low); return calls;
+      };
+      const before = structuredClone(effect), calls = trace('front');
+      assert.ok(calls.some(call => call[0] === 'stroke')); assert.ok(calls.length < 100);
+      assert.equal(calls.some(call => ['fill', 'rotate', 'createRadialGradient', 'fillText'].includes(String(call[0]))), false);
+      assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+      assert.ok(calls.every(call => call.slice(1).every(value => typeof value !== 'number' || Number.isFinite(value))));
+      assert.deepEqual(trace('ground'), []); assert.deepEqual(trace('front'), calls, 'drawing while paused cannot advance time');
+      assert.deepEqual(effect, before);
+      if (low && reduced) signatures.add(JSON.stringify(calls));
+    }
+    const batch = [effect]; advanceSpriteEffects(batch, effect.duration); assert.equal(batch.length, 0);
+  }
+  assert.equal(signatures.size, 2, 'purge and passive have different silhouettes even in LOW reduced motion');
+});
+
+test('actual Fawkes Purification carries an open seal from caster to recipient, never a second coffin', () => {
   const initial = createInitialData(), heroId = 'fawkes';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
   const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
@@ -1682,65 +1896,43 @@ test('actual Fawkes ultimate release converges outlined coffin seals without gen
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
   assert.ok(entries.some(e => e.sourceId === source.instanceId && e.castId === cast.castId &&
     e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
-  assert.ok(entries.some(e => e.sourceId === source.instanceId && e.castId === cast.castId &&
-    e.targetId === target.instanceId && e.type === 'crowd_control' && e.ccType === 'slow'));
+  assert.equal(entries.some(e => e.sourceId === source.instanceId && e.castId === cast.castId &&
+    e.type === 'crowd_control'), false, 'Purification no longer applies the template slow');
   const effect = createSpriteEffect(cast, source, target)!;
-  for (const low of [false, true]) {
-    let earlierDistance = 0;
-    for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
-      const before = structuredClone(effect), calls: unknown[][] = [];
-      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
-        calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
-      }, set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
-      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
-      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, count = low ? 2 : 3;
-      const b = projectSpritePosition(target.x, target.y, 390, 530);
-      const translations = calls.filter(c => c[0] === 'translate');
-      assert.deepEqual(translations[0], ['translate', b.x, b.y - 48 * scale]);
-      assert.equal(translations.length, count + 1, 'each seal has a local offset under the actual recipient');
-      const distances = translations.slice(1).map(c => Math.hypot(Number(c[1]), Number(c[2])));
-      assert.ok(distances.every(d => d > radius * 0.25 && d < radius * 0.6));
-      if (phase === 0.36) earlierDistance = distances[0];
-      else assert.ok(distances[0] < earlierDistance, 'seals converge instead of spinning around the body');
-      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'createRadialGradient'].includes(String(c[0]))), false);
-      assert.equal(calls.filter(c => c[0] === 'closePath').length, count, 'one six-sided outline per coffin seal');
-      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 3, 'coffin contour and two cross marks survive LOW');
-      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
-        assert.ok(Math.hypot(Number(c[1]), Number(c[2])) <= radius * 0.32);
-      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
-      assert.deepEqual(effect, before);
-    }
-  }
-  for (const low of [false, true]) {
-    let previousGap = 0;
-    for (const phase of [0.08, 0.14]) {
-      effect.age = effect.duration * phase;
+  const scale = Math.min(390 / 480, 530 / 680);
+  const a = projectSpritePosition(source.x, source.y, 390, 530), b = projectSpritePosition(target.x, target.y, 390, 530);
+  for (const low of [false, true]) for (const reduced of [false, true]) {
+    for (const phase of [0.08, 0.14, 0.36, 0.42, 0.55, 0.8]) {
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
-        calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+        calls.push([String(key), ...args]); return undefined;
       }, set: () => true }) as CanvasRenderingContext2D;
-      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
-      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale;
-      const a = projectSpritePosition(source.x, source.y, 390, 530);
-      const moves = calls.filter(c => c[0] === 'translate'); assert.equal(moves.length, 3, 'caster and two opening seal halves');
-      assert.deepEqual(moves[0], ['translate', a.x, a.y - 53 * scale]);
-      const gap = radius * (0.06 + phase / 0.36 * 0.12);
-      assert.ok(gap > previousGap); previousGap = gap;
-      assert.deepEqual(moves.slice(1), [['translate', -gap, 0], ['translate', gap, 0]]);
-      assert.equal(calls.filter(c => c[0] === 'closePath').length, 2, 'separate transparent coffin halves');
-      assert.equal(calls.filter(c => c[0] === 'stroke').length, 6, 'two half contours with two inset seal marks each');
-      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'quadraticCurveTo', 'createRadialGradient'].includes(String(c[0]))), false);
-      for (const c of calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0]))))
-        assert.ok(Math.abs(Number(c[1])) <= radius * 0.3 && Math.abs(Number(c[2])) <= radius * 0.45);
-      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
+      const moves = calls.filter(call => call[0] === 'translate');
+      assert.equal(moves.length, 1, 'one open seal, no orbiting coffin faces');
+      const travel = Math.max(0, Math.min(1, (phase - 0.18) / 0.32));
+      const expected = reduced ? { x: b.x, y: b.y - 48 * scale } : {
+        x: a.x + (b.x - a.x) * travel,
+        y: a.y - 53 * scale + ((b.y - 48 * scale) - (a.y - 53 * scale)) * travel,
+      };
+      assert.ok(Math.abs(Number(moves[0][1]) - expected.x) < 1e-7);
+      assert.ok(Math.abs(Number(moves[0][2]) - expected.y) < 1e-7);
+      assert.equal(calls.some(call => ['fill', 'closePath', 'ellipse', 'rotate', 'createRadialGradient'].includes(String(call[0]))), false,
+        'open purification brackets cannot look like closed captivity');
+      assert.ok(calls.some(call => call[0] === 'stroke')); assert.ok(calls.length < 100);
+      assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+      for (const call of calls.filter(call => ['moveTo', 'lineTo'].includes(String(call[0]))))
+        assert.ok(Math.hypot(Number(call[1]), Number(call[2])) < 35 * scale);
       assert.deepEqual(effect, before);
     }
   }
@@ -1754,9 +1946,12 @@ test('actual Lucius active release converges transparent shield faces at the rea
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents(); let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -1769,7 +1964,7 @@ test('actual Lucius active release converges transparent shield faces at the rea
   for (const low of [false, true]) {
     let earlierDistance = 0;
     for (const phase of [0.36, 0.42]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1804,9 +1999,12 @@ test('actual Hendrik active release carries an outlined shield toward the real r
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents(); let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -1817,7 +2015,7 @@ test('actual Hendrik active release carries an outlined shield toward the real r
     event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
   const effect = createSpriteEffect(cast, source, target)!;
   for (const phase of [0.36, 0.42]) for (const low of [false, true]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1870,7 +2068,7 @@ test('blade deliveries sweep toward the recipient instead of using a spear or ge
     const source = { ...fixture(), heroId, x: reverse ? 740 : 180, y: 210 };
     const target = { ...source, instanceId: 'blade-recipient', team: 'enemy' as const, x: reverse ? 180 : 740, y: 300 };
     const effect = createSpriteEffect({ id: 1170, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1895,9 +2093,12 @@ test('actual Walker active delivers a transparent shotgun stock strike instead o
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents(); let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -1946,8 +2147,10 @@ test('actual Walker ultimate delivers a narrow bullet fan along its real opponen
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(source.team, target.team);
@@ -1956,7 +2159,7 @@ test('actual Walker ultimate delivers a narrow bullet fan along its real opponen
   for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.36, 0.42]) {
     const effect = structuredClone(actual);
     if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -1987,7 +2190,7 @@ test('actual Walker ultimate delivers a narrow bullet fan along its real opponen
   for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.08, 0.14]) {
     const effect = structuredClone(actual);
     if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2019,8 +2222,10 @@ test('actual Gwyneth ultimate fans short fletched arrows across the real opponen
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(source.team, target.team);
@@ -2029,7 +2234,7 @@ test('actual Gwyneth ultimate fans short fletched arrows across the real opponen
   for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.36, 0.42]) {
     const effect = structuredClone(actual);
     if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2059,7 +2264,7 @@ test('actual Gwyneth ultimate fans short fletched arrows across the real opponen
   for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.08, 0.14]) {
     const effect = structuredClone(actual);
     if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2097,8 +2302,10 @@ test('actual Oscar ultimate fans compact daggers perpendicular to its real oppon
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
-  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+  sim.consumeEvents(); source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
   assert.notEqual(source.team, target.team);
@@ -2108,7 +2315,7 @@ test('actual Oscar ultimate fans compact daggers perpendicular to its real oppon
   for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.08, 0.14]) {
     const effect = structuredClone(actual);
     if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2140,7 +2347,7 @@ test('actual Oscar ultimate fans compact daggers perpendicular to its real oppon
   for (const reverse of [false, true]) for (const low of [false, true]) for (const phase of [0.36, 0.42]) {
     const effect = structuredClone(actual);
     if (reverse) { effect.source.x = 1000 - effect.source.x; effect.target.x = 1000 - effect.target.x; }
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2174,7 +2381,7 @@ test('Oscar delivers a handled dagger rather than the generic thrust spearhead',
     const source = { ...fixture(), heroId: 'oscar', x: 180, y: 210 };
     const target = { ...source, instanceId: 'dagger-recipient', team: 'enemy' as const, x: 740, y: 300 };
     const effect = createSpriteEffect({ id: 1180, timestampMs: 0, type: ultimate ? 'ultimate_cast' : 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2187,10 +2394,11 @@ test('Oscar delivers a handled dagger rather than the generic thrust spearhead',
 
 test('ranged arrow and bullet deliveries use oriented weapon glyphs instead of vertical magic diamonds', () => {
   for (const heroId of ['gwyneth', 'walker', 'raine']) for (const ultimate of [false, true]) {
+    if (heroId === 'raine' && ultimate) continue; // Mark-only ultimate is exercised by the real mark contract above.
     const source = { ...fixture(), heroId, x: 180, y: 210 };
     const target = { ...source, instanceId: 'ranged-recipient', team: 'enemy' as const, x: 740, y: 300 };
     const effect = createSpriteEffect({ id: 1150, timestampMs: 0, type: ultimate ? 'ultimate_cast' : 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-    effect.age = effect.duration * 0.42;
+    effect.age = artPhaseAge(effect, 0.42);
     const calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2213,7 +2421,7 @@ test('Rigby Fire Breath has a directed flame stream rather than a generic curved
   const source = { ...fixture(), heroId: 'hero_68_rigby', x: 180, y: 210 };
   const target = { ...source, instanceId: 'flame-recipient', team: 'enemy' as const, x: 740, y: 280 };
   const effect = createSpriteEffect({ id: 1130, timestampMs: 0, type: 'active_skill', sourceId: source.instanceId, sourceName: source.name }, source, target)!;
-  effect.age = effect.duration * 0.42;
+  effect.age = artPhaseAge(effect, 0.42);
   const before = structuredClone(effect);
   for (const low of [false, true]) {
     const calls: unknown[][] = [];
@@ -2240,10 +2448,13 @@ test('actual weapon skill damage uses compact directional cuts or punctures with
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -2294,7 +2505,8 @@ test('actual imported basic beams travel as short crisp rays instead of body-spa
     const source = sim.getUnits().find(u => u.heroId === hero.heroId && u.team === 'ally')!;
     sim.consumeEvents(); let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(e => e.sourceId === source.instanceId && e.type === 'basic_attack')) break;
     }
     const cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'basic_attack')!; assert.ok(cast);
@@ -2303,7 +2515,7 @@ test('actual imported basic beams travel as short crisp rays instead of body-spa
     assert.ok(entries.some(e => e.castId === cast.castId && e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!; covered++;
     for (const phase of [0.2, 0.55, 0.85]) for (const low of [false, true]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(key), ...args]); return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2314,7 +2526,9 @@ test('actual imported basic beams travel as short crisp rays instead of body-spa
       const scale = Math.min(390 / 480, 530 / 680);
       const a = projectSpritePosition(source.x, source.y, 390, 530), b = projectSpritePosition(target.x, target.y, 390, 530);
       a.y -= 52 * scale; b.y -= 48 * scale;
-      const travel = Math.max(0, Math.min(1, (phase - 0.12) / 0.38));
+      const travel = effect.timeline ? Math.max(0, Math.min(1,
+        (effect.age * 1000 - effect.timeline.releaseMs) / (effect.timeline.hits[0].atMs - effect.timeline.releaseMs))) :
+        Math.max(0, Math.min(1, (phase - 0.12) / 0.38));
       assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', a.x + (b.x - a.x) * travel, a.y + (b.y - a.y) * travel]]);
       const rotations = calls.filter(c => c[0] === 'rotate'); assert.equal(rotations.length, 1);
       assert.ok(Math.abs(Number(rotations[0][1]) - Math.atan2(b.y - a.y, b.x - a.x)) < 1e-8);
@@ -2342,7 +2556,7 @@ test('actual basic damage stays a compact unglowed contact accent rather than a 
     sim.consumeEvents();
     let events: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); events = sim.consumeEvents();
+      sim.step(50); events = collectChoreographyEvents(sim);
       if (events.some(event => event.sourceId === source.instanceId && event.type === 'basic_attack')) break;
     }
     const cast = events.find(event => event.sourceId === source.instanceId && event.type === 'basic_attack')!;
@@ -2378,7 +2592,8 @@ test('actual basic damage stays a compact unglowed contact accent rather than a 
 });
 
 test('actual spell and seal damage leaves small motif-specific recipient accents', () => {
-  for (const heroId of ['belinda', 'hero_68_rigby', 'eluard', 'hero_248_eluard', 'scarlet', 'fawkes', 'morrow', 'iron_bastion']) {
+  // Fawkes active is isolation-only; its real control and persistent coffin are covered separately.
+  for (const heroId of ['belinda', 'hero_68_rigby', 'eluard', 'hero_248_eluard', 'scarlet', 'morrow', 'iron_bastion']) {
     const initial = createInitialData();
     const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
     const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
@@ -2386,10 +2601,13 @@ test('actual spell and seal damage leaves small motif-specific recipient accents
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -2447,10 +2665,13 @@ test('actual arrow and dagger active arrivals keep compact weapon silhouettes in
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -2498,17 +2719,20 @@ test('actual Estrilda active and ultimate arrivals retain short directed lance t
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents();
   let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const active = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
   assert.ok(active, 'natural active must occur');
   const activeEntries = entries;
-  assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const ultimateEntries = sim.consumeEvents();
+  source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const ultimateEntries = collectChoreographyEvents(sim);
   const ultimate = ultimateEntries.find(event => event.sourceId === source.instanceId && event.type === 'ultimate_cast')!;
   assert.ok(ultimate, 'actual ultimate must occur');
   for (const [cast, outcomes, spec] of [[active, activeEntries, getHeroById(heroId).skills.active],
@@ -2519,7 +2743,7 @@ test('actual Estrilda active and ultimate arrivals retain short directed lance t
       event.targetId === target.instanceId && event.value! > 0), 'visible lance arrival needs an actual damaged recipient');
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.72, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [], localPaths: unknown[][] = [];
       let depth = 0;
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
@@ -2555,9 +2779,10 @@ test('actual Estrilda ultimate release flies short oriented lance tips rather th
     enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
   const source = sim.getUnits().find(unit => unit.heroId === 'estrilda' && unit.team === 'ally')!;
   assert.ok(source);
+  for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents();
-  assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-  const entries = sim.consumeEvents(), cast = entries.find(event => event.type === 'ultimate_cast' && event.sourceId === source.instanceId)!;
+  source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+  const entries = collectChoreographyEvents(sim), cast = entries.find(event => event.type === 'ultimate_cast' && event.sourceId === source.instanceId)!;
   assert.ok(cast);
   const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById('estrilda').skills.ultimate.targetType);
   assert.notEqual(target.team, source.team);
@@ -2565,7 +2790,7 @@ test('actual Estrilda ultimate release flies short oriented lance tips rather th
     event.targetId === target.instanceId && event.value! > 0));
   const effect = createSpriteEffect(cast, source, target)!;
   for (const phase of [0.38, 0.44]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [], tips: unknown[][][] = [];
     let depth = 0, current: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
@@ -2613,7 +2838,7 @@ test('actual Estrilda ultimate release flies short oriented lance tips rather th
 
 test('actual crowd control applications retain distinct compact recipient marks without replaying magic bursts', () => {
   const signatures = new Set<string>();
-  for (const ccType of ['stun', 'silence', 'slow', 'knockback', 'petrify'] as const) {
+  for (const ccType of ['stun', 'silence', 'slow', 'knockback', 'petrify', 'isolation'] as const) {
     const initial = createInitialData();
     const sim = new BattleSimulation({ allyFormation: initial.formation, ownedHeroes: initial.ownedHeroes,
       enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
@@ -2621,7 +2846,7 @@ test('actual crowd control applications retain distinct compact recipient marks 
     const target = sim.getUnits().find(unit => unit.team === 'enemy')!;
     sim.consumeEvents();
     sim.applyCrowdControl(source, target, ccType, 1200);
-    const event = sim.consumeEvents().find(entry => entry.type === 'crowd_control')!;
+    const event = collectChoreographyEvents(sim).find(entry => entry.type === 'crowd_control')!;
     assert.ok(event);
     assert.equal(event.ccType, ccType);
     assert.ok(target.statusEffects.some(status => status.type === ccType && status.remainingMs === 1200));
@@ -2654,7 +2879,7 @@ test('actual crowd control applications retain distinct compact recipient marks 
       assert.equal(calls.length, 0, 'a control outcome does not replay a floor charge');
     }
   }
-  assert.equal(signatures.size, 5, 'each actual control kind has its own static-safe shape');
+  assert.equal(signatures.size, 6, 'each actual control kind, including isolation, has its own static-safe shape');
 });
 
 test('imported control skills route their real cast outcomes to matching recipient marks and pause-safe timelines', () => {
@@ -2673,10 +2898,11 @@ test('imported control skills route their real cast outcomes to matching recipie
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -2691,7 +2917,10 @@ test('imported control skills route their real cast outcomes to matching recipie
       assert.notEqual(target.team, source.team);
       assert.equal(event.ccType, skill.ccType);
       assert.equal(event.skillSlot, slot);
-      assert.ok(target.statusEffects.some(status => status.type === event.ccType && status.sourceUnitId === source.instanceId));
+      const status = target.statusEffects.find(status => status.type === event.ccType && status.sourceUnitId === source.instanceId);
+      // The collector includes recovery: short contact knockbacks can legitimately expire before it returns.
+      if (sim.getElapsedMs() - event.timestampMs < event.value!) assert.ok(status);
+      else assert.equal(status, undefined);
       const effect = createSpriteEffect(event, source, target)!;
       assert.equal(effect.ccType, event.ccType);
       assert.equal(effect.skillSlot, slot);
@@ -2728,9 +2957,9 @@ test('imported control skills route their real cast outcomes to matching recipie
       if (effect) assert.equal(effect.ccType, undefined, 'casts and damage cannot fabricate a control outcome');
     }
   }
-  assert.equal(casts, 11, 'all current imported active and ultimate control specifications exercised');
+  assert.equal(casts, 11, 'all current control specifications exercised; Fawkes Purification no longer counts as slow');
   assert.ok(outcomes >= casts);
-  assert.deepEqual([...observedTypes].sort(), ['knockback', 'silence', 'slow', 'stun']);
+  assert.deepEqual([...observedTypes].sort(), ['isolation', 'knockback', 'silence', 'stun']);
 });
 
 test('real skill draws restore caller Canvas state and preserve composed arrival anchors and opacity', () => {
@@ -2798,9 +3027,10 @@ test('real skill draws restore caller Canvas state and preserve composed arrival
     const source = sim.getUnits().find(unit => unit.heroId === hero.heroId && unit.team === 'ally')!;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
-    if (slot === 'ultimate') { assert.equal(sim.triggerUltimate(source.instanceId, true), true); entries = sim.consumeEvents(); }
+    if (slot === 'ultimate') { source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true); entries = collectChoreographyEvents(sim); }
     else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(e => e.sourceId === source.instanceId && e.type === 'active_skill')) break;
     }
     const cast = entries.find(e => e.sourceId === source.instanceId && e.type === (slot === 'active' ? 'active_skill' : 'ultimate_cast'))!;
@@ -2809,7 +3039,7 @@ test('real skill draws restore caller Canvas state and preserve composed arrival
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.4601, 0.56, 0.6399, 0.64, 0.74, 0.92])
       for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-        effect.age = effect.duration * phase;
+        effect.age = artPhaseAge(effect, phase);
         const before = structuredClone(effect), trace = makeContext();
         drawSpriteSkillArt(trace.ctx, effect, 390, 530, reduced, low);
         assert.equal(trace.depth(), 0, `${hero.heroId}/${slot}/${phase}: balanced actual state stack`);
@@ -2839,7 +3069,12 @@ test('real skill draws restore caller Canvas state and preserve composed arrival
             assert.ok(draw.blur >= 0 && draw.blur <= 10 * scale);
           }
         }
-        if (!effect.support && !reduced) {
+        if (hero.heroId === 'fawkes' && slot === 'ultimate') {
+          const fade = Math.min(1, phase * 12) * Math.min(1, (1 - phase) * 5);
+          assert.ok(trace.draws.every(draw => Math.abs(draw.alpha - 0.4 * fade * 0.8) < 1e-12),
+            'open purification seal preserves caller opacity without the legacy coffin bloom');
+        }
+        if (!effect.support && !reduced && !(['raine', 'fawkes'].includes(hero.heroId) && slot === 'ultimate')) {
           const fade = Math.min(1, phase * 12) * Math.min(1, (1 - phase) * 5);
           const arrivalAlpha = 0.4 * fade * 0.7 * Math.max(0, Math.min(1, (phase - 0.46) / 0.24));
           const deliveryAlpha = 0.4 * fade * 0.7 * 0.65;
@@ -2900,13 +3135,16 @@ test('actual Lucius and Hendrik offensive arrivals use compact distinct shield c
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -2919,7 +3157,7 @@ test('actual Lucius and Hendrik offensive arrivals use compact distinct shield c
     const effect = createSpriteEffect(cast, source, target)!;
     let earlierEnvelope = 0;
     for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -2961,13 +3199,16 @@ test('actual Gwyneth and Oscar arrivals keep directed weapon details without a s
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -2979,7 +3220,7 @@ test('actual Gwyneth and Oscar arrivals keep directed weapon details without a s
       event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3022,13 +3263,16 @@ test('actual blade heroes settle compact directed cuts at the real victim withou
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3040,7 +3284,7 @@ test('actual blade heroes settle compact directed cuts at the real victim withou
       event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!, art = getSpriteSkillArt(heroId)!;
     for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3082,13 +3326,16 @@ test('actual Belinda active and ultimate arrivals retain compact open light rays
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3100,7 +3347,7 @@ test('actual Belinda active and ultimate arrivals retain compact open light rays
       event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3141,13 +3388,16 @@ test('actual Scarlet active and ultimate arrivals retain hollow open vortex arms
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3159,7 +3409,7 @@ test('actual Scarlet active and ultimate arrivals retain hollow open vortex arms
       event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3189,7 +3439,93 @@ test('actual Scarlet active and ultimate arrivals retain hollow open vortex arms
   }
 });
 
-test('actual Fawkes active and ultimate arrivals close compact transparent coffin halves at the real victim', () => {
+test('live coffin fallback follows real isolation status, freezes the actor and blocks full-energy readiness', () => {
+  const initial = createInitialData();
+  const sim = new BattleSimulation({ allyFormation: ['fawkes', null, null, null, null], ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2026, autoUltimate: false });
+  const source = sim.getUnits().find(unit => unit.team === 'ally')!;
+  for (const unit of sim.getUnits()) { unit.basicAttackCooldownMs = 1e6; unit.activeSkillCooldownMs = 1e6; unit.moveSpeedPxPerSec = 0; unit.energy = 0; }
+  source.attackRangePx = 1000; source.activeSkillCooldownMs = 0;
+  sim.step(50); sim.step(600);
+  const target = sim.getUnits().find(unit => unit.statusEffects.some(status => status.type === 'isolation'))!;
+  assert.ok(target); target.energy = 100;
+  assert.equal(getUltimateReadiness(target).label, 'Cô lập');
+  assert.equal(getUltimateReadiness(target).canCast, false);
+  const actor = createSpriteActor(target), beforeActor = structuredClone(actor);
+  advanceSpriteActor(actor, target, 1);
+  assert.deepEqual(actor, beforeActor, 'living captive cannot animate a run, attack or death');
+  const before = structuredClone(target);
+  const trace = () => {
+    const calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, name) => (...args: unknown[]) => calls.push([String(name), ...args]),
+      set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
+    assert.equal(drawSpriteIsolation(ctx, target, 150, 250, 1), true);
+    return calls;
+  };
+  const calls = trace();
+  assert.deepEqual(trace(), calls, 'static fallback has no cosmetic clock, particles or quality dependency');
+  assert.ok(calls.some(call => call[0] === 'fillText' && call[1] === '3s'));
+  assert.ok(calls.some(call => call[0] === 'translate' && call[1] === 150 && call[2] === 250));
+  assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+  assert.equal(calls.some(call => ['rotate', 'drawImage', 'createRadialGradient'].includes(String(call[0]))), false);
+  for (const call of calls) for (const value of call.slice(1)) if (typeof value === 'number') assert.ok(Number.isFinite(value));
+  assert.deepEqual(target, before);
+  const actualControl = sim.consumeEvents().find(event => event.type === 'crowd_control' && event.ccType === 'isolation')!;
+  assert.equal(resolveSpriteEffectTarget(actualControl, [actualControl], sim.getUnits(), source, 'current_target'), target,
+    'actual capture recipient remains resolvable even though unavailable');
+  sim.step(3000);
+  assert.equal(target.isAlive, true);
+  assert.equal(drawSpriteIsolation({} as CanvasRenderingContext2D, target, 150, 250, 1), false);
+});
+
+test('Fawkes coffin doors close on the status clock and actual return emits bounded opening feedback', () => {
+  const initial = createInitialData();
+  const sim = new BattleSimulation({ allyFormation: ['fawkes', null, null, null, null], ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2026, autoUltimate: false });
+  const source = sim.getUnits().find(unit => unit.team === 'ally')!, target = sim.getUnits().find(unit => unit.team === 'enemy')!;
+  for (const unit of sim.getUnits()) { unit.basicAttackCooldownMs = 1e6; unit.activeSkillCooldownMs = 1e6; unit.moveSpeedPxPerSec = 0; }
+  sim.applyCrowdControl(source, target, 'isolation', 3000); sim.consumeEvents();
+  const draw = (reduced: boolean, low: boolean) => {
+    const calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => calls.push([String(name), ...args]),
+      set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
+    drawSpriteIsolation(ctx, target, 150, 250, 1, reduced, low); return calls;
+  };
+  const open = draw(false, false), still = draw(true, false), lowOpen = draw(false, true);
+  assert.ok(open.some(call => call[0] === 'translate' && call[1] === -21 && call[2] === 0));
+  assert.ok(still.filter(call => call[0] === 'translate').slice(1).every(call => Number(call[1]) === 0));
+  assert.ok(lowOpen.length < open.length, 'LOW removes bevel ornament, never the captive or countdown');
+  sim.step(250); const closed = draw(false, false);
+  assert.ok(closed.filter(call => call[0] === 'translate').slice(1).every(call => Number(call[1]) === 0));
+  sim.setPaused(true); sim.step(5000); assert.deepEqual(draw(false, false), closed, 'pause cannot move doors or seal');
+  sim.setPaused(false); sim.step(2750);
+  const returned = sim.consumeEvents().find(event => event.type === 'isolation_end')!;
+  assert.ok(returned); assert.equal(target.isAlive, true);
+  const effect = createSpriteEffect(returned, source, target);
+  assert.ok(effect, 'actual release has its own recipient-local opening acknowledgement');
+  assert.equal(effect.kind, 'isolation-return');
+  const trace = (reduced: boolean, low: boolean, age: number) => {
+    const calls: unknown[][] = [];
+    const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => calls.push([String(name), ...args]),
+      set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
+    const fixture = { ...effect, age }, before = structuredClone(fixture);
+    drawSpriteEffects(ctx, [fixture], 390, 530, reduced, 'front', low);
+    assert.deepEqual(fixture, before);
+    assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+    assert.equal(calls.some(call => ['fill', 'rotate', 'createRadialGradient'].includes(String(call[0]))), false);
+    for (const call of calls) for (const n of call.slice(1)) if (typeof n === 'number') assert.ok(Number.isFinite(n));
+    return calls;
+  };
+  for (const low of [false, true]) {
+    const early = trace(false, low, effect.duration * 0.1), late = trace(false, low, effect.duration * 0.8);
+    const gap = (calls: unknown[][]) => Math.abs(Number(calls.filter(call => call[0] === 'translate')[1][1]));
+    assert.ok(gap(late) > gap(early), 'real return opens the doors, never closes over the restored actor');
+    assert.deepEqual(trace(true, low, effect.duration * 0.1).filter(call => call[0] !== 'set'),
+      trace(true, low, effect.duration * 0.8).filter(call => call[0] !== 'set'), 'reduced motion geometry stays still');
+  }
+});
+
+test('actual Fawkes arrivals distinguish closing active coffin from open ultimate purification', () => {
   const initial = createInitialData(), heroId = 'fawkes';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
   const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
@@ -3198,13 +3534,16 @@ test('actual Fawkes active and ultimate arrivals close compact transparent coffi
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3212,13 +3551,17 @@ test('actual Fawkes active and ultimate arrivals close compact transparent coffi
     assert.ok(cast);
     const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills[slot].targetType);
     assert.notEqual(target.team, source.team);
-    assert.ok(entries.some(event => event.sourceId === source.instanceId && event.castId === cast.castId &&
+    if (slot === 'active') {
+      assert.ok(entries.some(event => event.sourceId === source.instanceId && event.castId === cast.castId &&
+        event.targetId === target.instanceId && event.type === 'crowd_control' && event.ccType === 'isolation'));
+      assert.equal(entries.some(event => event.sourceId === source.instanceId && event.castId === cast.castId && event.type === 'damage'), false);
+    } else assert.ok(entries.some(event => event.sourceId === source.instanceId && event.castId === cast.castId &&
       event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const gaps: number[] = [];
       for (const phase of [0.74, 0.92]) {
-        effect.age = effect.duration * phase;
+        effect.age = artPhaseAge(effect, phase);
         const before = structuredClone(effect), calls: unknown[][] = [];
         const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
           calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3229,7 +3572,10 @@ test('actual Fawkes active and ultimate arrivals close compact transparent coffi
         assert.ok(calls.some(call => call[0] === 'translate' && call[1] === b.x && call[2] === b.y - 48 * scale));
         assert.equal(calls.some(call => ['fill', 'arc', 'ellipse', 'rotate', 'createRadialGradient'].includes(String(call[0]))), false,
           'coffin remains transparent without a shared halo or diamond particles');
-        if (!reduced) {
+        if (slot === 'ultimate') {
+          assert.equal(calls.filter(call => call[0] === 'translate').length, 1, 'purification stays open at the recipient');
+          assert.equal(calls.filter(call => call[0] === 'closePath').length, 0, 'ultimate cannot close a second prison');
+        } else if (!reduced) {
           const halves = calls.filter(call => call[0] === 'translate').slice(1);
           assert.equal(halves.length, 2, 'one local transform per coffin half');
           assert.equal(halves[0][1], -Number(halves[1][1]));
@@ -3244,7 +3590,7 @@ test('actual Fawkes active and ultimate arrivals close compact transparent coffi
         for (const call of calls) for (const value of call.slice(1)) if (typeof value === 'number') assert.ok(Number.isFinite(value));
         assert.deepEqual(effect, before);
       }
-      if (!reduced) assert.ok(gaps[1] < gaps[0], 'halves close toward the recipient during recovery');
+      if (!reduced && slot === 'active') assert.ok(gaps[1] < gaps[0], 'halves close toward the recipient during recovery');
     }
   }
 });
@@ -3258,13 +3604,16 @@ test('actual Morrow active and ultimate arrivals close outlined lids without a f
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3278,7 +3627,7 @@ test('actual Morrow active and ultimate arrivals close outlined lids without a f
     for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const openings: number[] = [];
       for (const phase of [0.74, 0.92]) {
-        effect.age = effect.duration * phase;
+        effect.age = artPhaseAge(effect, phase);
         const before = structuredClone(effect), calls: unknown[][] = [];
         const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
           calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3314,10 +3663,13 @@ test('actual Rigby Fire Breath arrival leaves directed open flame tongues instea
   const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
     seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
   const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
   sim.consumeEvents();
   let entries: CombatEvent[] = [];
   for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-    sim.step(50); entries = sim.consumeEvents();
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
     if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
   }
   const cast = entries.find(event => event.sourceId === source.instanceId && event.type === 'active_skill')!;
@@ -3328,7 +3680,7 @@ test('actual Rigby Fire Breath arrival leaves directed open flame tongues instea
     event.targetId === target.instanceId && event.type === 'damage' && event.value! > 0));
   const effect = createSpriteEffect(cast, source, target)!;
   for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-    effect.age = effect.duration * phase;
+    effect.age = artPhaseAge(effect, phase);
     const before = structuredClone(effect), calls: unknown[][] = [];
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
       calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3361,7 +3713,7 @@ test('actual offensive casts and damage retain static motif identity in reduced 
   let casts = 0, impacts = 0;
   for (const hero of OATHBOUND_HEROES) for (const slot of ['active', 'ultimate'] as const) {
     const skill = getHeroById(hero.heroId).skills[slot];
-    if (['all_allies', 'lowest_hp_ally', 'self'].includes(skill.targetType)) continue;
+    if (['all_allies', 'lowest_hp_ally', 'self'].includes(skill.targetType) || skill.damageMultiplier === 0) continue;
     const initial = createInitialData();
     const formation = [hero.heroId, ...initial.formation.filter(id => id !== hero.heroId)].slice(0, 5) as TeamFormationSlots;
     const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, owned]) => [id,
@@ -3372,10 +3724,11 @@ test('actual offensive casts and damage retain static motif identity in reduced 
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3393,7 +3746,7 @@ test('actual offensive casts and damage retain static motif identity in reduced 
       const motif = getSpriteSkillArt(hero.heroId)!.motif;
       let stableGeometry: unknown[][] | undefined;
       for (const low of [false, true]) for (const phase of [0.42, 0.74, 0.92]) {
-        effect.age = effect.duration * phase;
+        effect.age = artPhaseAge(effect, phase);
         const before = structuredClone(effect), calls: unknown[][] = [];
         const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
           calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3418,14 +3771,14 @@ test('actual offensive casts and damage retain static motif identity in reduced 
       }
     }
   }
-  assert.equal(casts, 30, 'all sixteen offensive actives and fourteen offensive ultimates exercised');
+  assert.equal(casts, 30, 'sixteen damaging actives and fourteen damaging ultimates; Fawkes isolation and Raine mark-only casts have separate contracts');
   assert.equal(impacts, casts);
-  assert.deepEqual([...signatures.keys()].sort(), ['aegis', 'arrows', 'bastion', 'blades', 'coffin', 'crossfire', 'daggers',
-    'embers', 'eye', 'lance', 'prism', 'seraph', 'vortex'], 'all offensive motif families covered by actual active casts');
+  assert.deepEqual([...signatures.keys()].sort(), ['aegis', 'arrows', 'bastion', 'blades', 'crossfire', 'daggers',
+    'embers', 'eye', 'lance', 'prism', 'seraph', 'vortex'], 'damaging active motif families; control-only coffin has dedicated normal/LOW/reduced coverage');
   assert.equal(new Set(signatures.values()).size, signatures.size, 'motifs remain distinguishable by geometry, not only color');
 });
 
-test('actual Walker active and ultimate arrivals use directed bullet streaks instead of radial magic bursts', () => {
+test('actual Walker arrivals distinguish a settling stock contact from ultimate bullet streaks', () => {
   const initial = createInitialData();
   const heroId = 'walker';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
@@ -3435,13 +3788,16 @@ test('actual Walker active and ultimate arrivals use directed bullet streaks ins
     const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
       seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
     const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    // Choreography damage assertions require HP loss, not damage absorbed by opening wards.
+    for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
     sim.consumeEvents();
     let entries: CombatEvent[] = [];
     if (slot === 'ultimate') {
-      assert.equal(sim.triggerUltimate(source.instanceId, true), true);
-      entries = sim.consumeEvents();
+      source.energy = 100; assert.equal(sim.triggerUltimate(source.instanceId), true);
+      entries = collectChoreographyEvents(sim);
     } else for (let step = 0; step < 400 && sim.getStatus() === 'running'; step++) {
-      sim.step(50); entries = sim.consumeEvents();
+      for (const enemy of sim.getUnits().filter(unit => unit.team === 'enemy')) enemy.shield = 0;
+      sim.step(50); entries = collectChoreographyEvents(sim);
       if (entries.some(event => event.sourceId === source.instanceId && event.type === 'active_skill')) break;
     }
     const cast = entries.find(event => event.sourceId === source.instanceId &&
@@ -3453,7 +3809,7 @@ test('actual Walker active and ultimate arrivals use directed bullet streaks ins
       event.type === 'damage' && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
     for (const phase of [0.74, 0.92]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
-      effect.age = effect.duration * phase;
+      effect.age = artPhaseAge(effect, phase);
       const before = structuredClone(effect), calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
@@ -3467,8 +3823,19 @@ test('actual Walker active and ultimate arrivals use directed bullet streaks ins
         const rotations = calls.filter(call => call[0] === 'rotate');
         assert.equal(rotations.length, 1, 'one actual firing bearing, no radial/spinning bullets');
         assert.equal(rotations[0][1], Math.atan2(b.y - 48 * scale - (a.y - 53 * scale), b.x - a.x));
-        const count = low ? slot === 'ultimate' ? 3 : 2 : slot === 'ultimate' ? 5 : 3;
-        assert.equal(calls.filter(call => call[0] === 'stroke').length, count * 3, 'each short bullet streak retains two contact ticks');
+        if (slot === 'active') {
+          assert.equal(calls.filter(call => call[0] === 'stroke').length, 3, 'one open contact chevron and two short recoil marks');
+          assert.equal(calls.filter(call => call[0] === 'lineTo').length, 4, 'no extra bullet fan');
+          const settle = Math.max(0, Math.min(1, (phase - 0.66) / 0.34));
+          const size = radius * (0.38 - settle * 0.12);
+          const moves = calls.filter(call => call[0] === 'moveTo');
+          assert.equal(moves.length, 3);
+          assert.ok(Math.abs(Number(moves[0][1]) + size * 0.25) < 1e-8);
+          assert.ok(Math.abs(Number(moves[0][2]) + size * 0.65) < 1e-8, 'stock-contact outline contracts during recovery');
+        } else {
+          const count = low ? 3 : 5;
+          assert.equal(calls.filter(call => call[0] === 'stroke').length, count * 3, 'ultimate retains each short bullet streak and two contact ticks');
+        }
         for (const call of calls.filter(call => ['moveTo', 'lineTo'].includes(String(call[0]))))
           assert.ok(Math.abs(Number(call[1])) <= radius * 0.8 && Math.abs(Number(call[2])) <= radius * 0.8, 'bullet marks stay compact');
         assert.ok(calls.some(call => call[0] === 'translate' && call[1] === b.x && call[2] === b.y - 48 * scale));
@@ -3512,7 +3879,7 @@ test('support cast signatures distinguish active blessings from ultimates withou
     const trace = (ultimate: boolean) => {
       const effect = createSpriteEffect({ id: 95, timestampMs: 0, type: ultimate ? 'ultimate_cast' : 'active_skill',
         sourceId: source.instanceId, sourceName: source.name }, source, ally)!;
-      effect.age = effect.duration * 0.42;
+      effect.age = artPhaseAge(effect, 0.42);
       const calls: unknown[][] = [];
       const ctx = new Proxy({}, {
         get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
@@ -4002,15 +4369,19 @@ test('ultimate readiness mirrors real cast eligibility without treating forced s
     const blocked = { ...unit, energy: 100, statusEffects: [{ id: 'control', type, durationMs: 1000,
       remainingMs: 1000, magnitude: 1, sourceUnitId: unit.instanceId }] };
     assert.equal(getUltimateReadiness(blocked).state, 'blocked');
-    assert.equal(getUltimateReadiness(blocked).canShowcase, false);
+    assert.equal(getUltimateReadiness(blocked).canCast, false);
     assert.equal(getUltimateReadiness({ ...blocked, isAlive: false }).state, 'dead');
   }
-  assert.equal(getUltimateReadiness({ ...unit, energy: 0 }).canShowcase, true);
+  assert.equal(getUltimateReadiness(undefined).canCast, false);
+  for (const energy of [0, 99.9, NaN, Infinity, -10])
+    assert.equal(getUltimateReadiness({ ...unit, energy }).canCast, false);
+  assert.equal(getUltimateReadiness({ ...unit, energy: 100 }).canCast, true);
+  assert.equal(getUltimateReadiness({ ...unit, energy: 100, isAlive: false }).canCast, false);
   assert.equal(getUltimateReadiness({ ...unit, energy: 100 }, 'victory').state, 'finished');
-  assert.equal(getUltimateReadiness({ ...unit, energy: 100 }, 'defeat').canShowcase, false);
+  assert.equal(getUltimateReadiness({ ...unit, energy: 100 }, 'defeat').canCast, false);
 });
 
-test('readiness agrees with actual engine normal and forced casts for energy and control states', () => {
+test('readiness agrees with engine energy and control requirements even when the legacy force flag is passed', () => {
   for (const energy of [0, 99.9, 100]) for (const control of [undefined, 'stun', 'petrify', 'silence'] as const) {
     for (const force of [false, true]) {
       const initial = createInitialData();
@@ -4020,7 +4391,7 @@ test('readiness agrees with actual engine normal and forced casts for energy and
       if (control) unit.statusEffects.push({ id: 'control', type: control, durationMs: 1000, remainingMs: 1000,
         magnitude: 1, sourceUnitId: unit.instanceId });
       const readiness = getUltimateReadiness(unit, sim.getStatus());
-      assert.equal(sim.triggerUltimate(unit.instanceId, force), force ? readiness.canShowcase : readiness.state === 'ready',
+      assert.equal(sim.triggerUltimate(unit.instanceId, force), readiness.canCast,
         `energy=${energy},control=${control},force=${force}`);
     }
   }
@@ -4041,7 +4412,32 @@ test('actual ultimate bar renders readiness and keeps the identity of blocked, c
     onTriggerComboUlt() {}, onClaimIdle() {}, onAutoUpgrade() {}, onTriggerHeroUlt() {}, onOpenFormation() {} }));
   for (const state of ['ready', 'blocked', 'dead', 'charging']) assert.ok(markup.includes(`data-ultimate-state="${state}"`));
   assert.ok(markup.includes('Câm lặng')); assert.ok(markup.includes('Sẵn sàng')); assert.ok(markup.includes('Nạp 45%'));
-  assert.ok(markup.includes('Estrilda')); assert.ok(markup.includes('Lucius')); assert.ok(markup.includes('bỏ qua yêu cầu năng lượng'));
+  assert.ok(markup.includes('Estrilda')); assert.ok(markup.includes('Lucius'));
+  const button = (html: string, id: string) => {
+    const tag = html.match(new RegExp(`<button\\b[^>]*data-testid="${id}"[^>]*>`))?.[0];
+    assert.ok(tag, `${id}: rendered button required`); return tag;
+  };
+  const verify = (html: string, id: string, eligible: boolean) => {
+    const tag = button(html, id);
+    assert.ok(tag.includes(`aria-disabled="${!eligible}"`), `${id}: accessible eligibility`);
+    assert.equal(/\sdisabled=""/.test(tag), !eligible, `${id}: native disabled eligibility`);
+    assert.ok(tag.includes('aria-label="') && tag.includes('title="'));
+    assert.ok(tag.includes('đầy năng lượng'));
+    assert.equal(/bỏ qua|không cần đầy/.test(tag), false);
+  };
+  for (const unit of units) verify(markup, `ult-card-${unit.heroId}`, unit === units[0]);
+  verify(markup, 'btn-combo-ultimates', true);
+  assert.ok(button(markup, 'btn-combo-ultimates').includes('chỉ các tướng đủ điều kiện'));
+  units[0].energy = 99.9;
+  const render = (liveSnapshot: ReturnType<BattleSimulation['getSnapshot']> | null) =>
+    renderToStaticMarkup(React.createElement(HeroUltimateBar, { formation: initial.formation,
+      ownedHeroes: initial.ownedHeroes, liveSnapshot, idleMinutes: 1,
+      onTriggerComboUlt() {}, onClaimIdle() {}, onAutoUpgrade() {}, onTriggerHeroUlt() {}, onOpenFormation() {} }));
+  for (const html of [render(sim.getSnapshot()), render(null),
+    render({ ...sim.getSnapshot(), status: 'victory' }), render({ ...sim.getSnapshot(), status: 'defeat' })]) {
+    verify(html, 'btn-combo-ultimates', false);
+    for (const unit of units) verify(html, `ult-card-${unit.heroId}`, false);
+  }
 });
 
 test('ultimate announcements retain simultaneous casters, bound overflow and count only distinct same-team combo casts', () => {

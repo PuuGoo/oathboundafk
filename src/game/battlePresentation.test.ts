@@ -25,12 +25,16 @@ test('opening passive wards emit once from initialized shields and actual cast o
   }
   assert.deepEqual(sim.consumeEvents(), [], 'opening wards cannot replay');
   const caster = sim.getUnits().find(unit => unit.heroId === 'celestial_guardian' && unit.team === 'ally')!;
-  assert.equal(sim.triggerUltimate(caster.instanceId, true), true);
-  const events = sim.consumeEvents();
+  caster.energy = 100;
+  assert.equal(sim.triggerUltimate(caster.instanceId), true);
+  const events = collectCast(sim, caster.instanceId);
   const cast = events.find(event => event.type === 'ultimate_cast')!;
   const outcomes = events.filter(event => event.sourceId === caster.instanceId && ['damage', 'shield', 'buff'].includes(event.type));
-  assert.ok(outcomes.some(event => event.type === 'damage'));
-  assert.ok(outcomes.some(event => event.type === 'shield'));
+  assert.equal(outcomes.filter(event => event.type === 'damage').length, 0, 'Lucius protection cannot fabricate offensive outcomes');
+  const livingAllies = sim.getUnits().filter(unit => unit.team === 'ally' && unit.isAlive).map(unit => unit.instanceId).sort();
+  for (const type of ['shield', 'buff']) {
+    assert.deepEqual(outcomes.filter(event => event.type === type).map(event => event.targetId).sort(), livingAllies);
+  }
   for (const event of [cast, ...outcomes]) {
     assert.equal(event.skillSlot, 'ultimate'); assert.equal(event.castId, cast.id);
     assert.equal(event.skillName, getHeroById(caster.heroId).skills.ultimate.name);
@@ -84,8 +88,9 @@ test('completed casts never leak presentation attribution into later public crow
   const sim = fixture();
   sim.consumeEvents();
   const caster = sim.getUnits().find(unit => unit.heroId === 'celestial_guardian' && unit.team === 'ally')!;
-  assert.equal(sim.triggerUltimate(caster.instanceId, true), true);
-  const cast = sim.consumeEvents().find(event => event.type === 'ultimate_cast')!;
+  caster.energy = 100;
+  assert.equal(sim.triggerUltimate(caster.instanceId), true);
+  const cast = collectCast(sim, caster.instanceId).find(event => event.type === 'ultimate_cast')!;
   assert.equal(cast.skillSlot, 'ultimate');
   const target = sim.getUnits().find(unit => unit.team === 'enemy' && unit.isAlive)!;
   sim.applyCrowdControl(caster, target, 'knockback', 600);
@@ -108,8 +113,29 @@ function fixture(maxDurationMs = 90000) {
     seed: 2201, autoUltimate: false, maxDurationMs });
 }
 
-/** Leaves one vulnerable nearby enemy so a manual damaging ultimate ends the battle. */
-function finishManually(sim: BattleSimulation) {
+/** Freeze unrelated actions while preserving simulation-owned cast advancement. */
+function advanceControlled(sim: BattleSimulation) {
+  for (const unit of sim.getUnits()) {
+    unit.basicAttackCooldownMs = Infinity; unit.activeSkillCooldownMs = Infinity;
+    unit.moveSpeedPxPerSec = 0;
+    if (unit.team === 'enemy') unit.energy = 0;
+  }
+  sim.step(50);
+}
+
+/** Gather a cast's immediate start and delayed results through its declared duration. */
+function collectCast(sim: BattleSimulation, casterId: string) {
+  const events = sim.consumeEvents();
+  const caster = sim.getUnits().find(unit => unit.instanceId === casterId)!;
+  for (let tick = 0; tick < 80 && caster.currentCast && sim.getStatus() === 'running'; tick++) {
+    advanceControlled(sim); events.push(...sim.consumeEvents());
+  }
+  assert.ok(!caster.currentCast || sim.getStatus() !== 'running');
+  return events;
+}
+
+/** Leaves one vulnerable nearby enemy so a delayed damaging ultimate ends the battle. */
+function startFinalUltimate(sim: BattleSimulation) {
   const caster = sim.getUnits().find(u => u.heroId === 'belinda')!;
   const enemies = sim.getUnits().filter(u => u.team === 'enemy');
   for (const enemy of enemies) {
@@ -117,8 +143,9 @@ function finishManually(sim: BattleSimulation) {
     enemy.shield = 0; enemy.baseDefense = 0;
     enemy.x = caster.x; enemy.y = caster.y;
   }
-  assert.equal(sim.triggerUltimate(caster.instanceId, true), true);
-  assert.equal(sim.getStatus(), 'victory', 'fixture must finish outside sim.step');
+  caster.energy = 100;
+  assert.equal(sim.triggerUltimate(caster.instanceId), true);
+  assert.equal(sim.getStatus(), 'running', 'cast start cannot resolve the delayed killing hit');
 }
 
 test('impact audio plays once per positive damage batch, prioritizes criticals and ignores support/empty damage', () => {
@@ -137,19 +164,29 @@ test('impact audio plays once per positive damage batch, prioritizes criticals a
   assert.deepEqual(inputs, before);
 });
 
-test('manual final ultimate drains events before reporting victory exactly once', () => {
+test('delayed final ultimate drains each event batch before reporting victory exactly once', () => {
   const sim = fixture();
   sim.consumeEvents();
-  finishManually(sim);
+  startFinalUltimate(sim);
   const observe = createBattlePresentationObserver();
   const events: CombatEvent[] = [], snapshots: BattleSnapshot[] = [], order: string[] = [];
   const inspect = () => observe(sim, batch => { events.push(...batch); order.push('events'); },
     snapshot => { snapshots.push(snapshot); order.push('finished'); });
   inspect(); inspect();
+  assert.equal(snapshots.length, 0, 'cast start must not complete the battle');
+  assert.equal(events.some(event => event.type === 'death'), false);
+  for (let tick = 0; tick < 80 && sim.getStatus() === 'running'; tick++) {
+    advanceControlled(sim); inspect();
+  }
+  inspect(); inspect();
   assert.ok(events.some(event => event.type === 'ultimate_cast'));
   assert.ok(events.some(event => event.type === 'death'));
   assert.equal(snapshots.length, 1);
-  assert.deepEqual(order, ['events', 'finished']);
+  assert.deepEqual(order, ['events', 'events', 'events', 'finished']);
+  const cast = events.find(event => event.type === 'ultimate_cast')!;
+  const death = events.find(event => event.type === 'death')!;
+  assert.ok(death.timestampMs >= cast.timestampMs + 650, 'victory waits for Belinda’s first declared hit');
+  assert.ok(events.some(event => event.type === 'damage' && event.castId === cast.id && event.value === 1));
   assert.equal(snapshots[0].status, 'victory');
 });
 
@@ -157,8 +194,13 @@ test('new simulation gets its own completion even when instance IDs are reused',
   const observe = createBattlePresentationObserver();
   const completed: BattleSnapshot[] = [];
   for (const sim of [fixture(), fixture()]) {
-    finishManually(sim);
+    startFinalUltimate(sim);
+    const before = completed.length;
     observe(sim, () => {}, snapshot => completed.push(snapshot));
+    assert.equal(completed.length, before, 'cast start cannot report completion');
+    for (let tick = 0; tick < 80 && sim.getStatus() === 'running'; tick++) {
+      advanceControlled(sim); observe(sim, () => {}, snapshot => completed.push(snapshot));
+    }
     observe(sim, () => {}, snapshot => completed.push(snapshot));
   }
   assert.equal(completed.length, 2);
@@ -169,8 +211,14 @@ test('running manual casts drain without premature completion', () => {
   const observe = createBattlePresentationObserver();
   let completed = false;
   let events = 0;
-  sim.triggerUltimate('celestial_guardian', true);
-  observe(sim, batch => { events += batch.length; }, () => { completed = true; });
+  sim.consumeEvents();
+  const caster = sim.getUnits().find(unit => unit.heroId === 'celestial_guardian' && unit.team === 'ally')!;
+  caster.energy = 100;
+  assert.equal(sim.triggerUltimate(caster.instanceId), true);
+  observe(sim, batch => {
+    assert.ok(batch.some(event => event.type === 'ultimate_cast' && event.sourceId === caster.instanceId));
+    events += batch.length;
+  }, () => { completed = true; });
   assert.equal(sim.getStatus(), 'running');
   assert.ok(events > 0);
   assert.equal(completed, false);
@@ -178,13 +226,18 @@ test('running manual casts drain without premature completion', () => {
 
 test('completion is marked before callbacks so reentrant observation cannot grant twice', () => {
   const sim = fixture();
-  finishManually(sim);
+  startFinalUltimate(sim);
   const observe = createBattlePresentationObserver();
   let completions = 0;
   const finish = () => {
     completions++;
     observe(sim, () => {}, finish);
   };
+  observe(sim, () => {}, finish);
+  assert.equal(completions, 0);
+  for (let tick = 0; tick < 80 && sim.getStatus() === 'running'; tick++) {
+    advanceControlled(sim); observe(sim, () => {}, finish);
+  }
   observe(sim, () => {}, finish);
   assert.equal(completions, 1);
 });

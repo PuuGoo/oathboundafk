@@ -225,20 +225,22 @@ export default function App() {
         handleRetryBattle();
       } else if (e.code === 'KeyC') {
         e.preventDefault();
+        if (shellState !== 'playing') return;
         setManualUltimateRequest({
           heroId: '__ALL__',
-          force: true,
+          force: false,
           seq: Date.now(),
         });
       } else if (
         ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].includes(e.code)
       ) {
+        if (shellState !== 'playing') return;
         const idx = Number(e.code.replace('Digit', '')) - 1;
         const heroId = store.formation[idx];
         if (heroId) {
           setManualUltimateRequest({
             heroId,
-            force: true,
+            force: false,
             seq: Date.now(),
           });
         }
@@ -377,22 +379,20 @@ export default function App() {
                   liveSnapshot={liveSnapshot}
                   idleMinutes={idleMinutes}
                   onTriggerComboUlt={() => {
-                    setShellState('playing');
-                    store.setActiveScreen('battle');
+                    if (isSimulationPaused) return;
                     setManualUltimateRequest({
                       heroId: '__ALL__',
-                      force: true,
+                      force: false,
                       seq: Date.now(),
                     });
                   }}
                   onClaimIdle={() => store.claimIdleTribute()}
                   onAutoUpgrade={() => store.autoUpgradeSquad()}
                   onTriggerHeroUlt={(heroId) => {
-                    setShellState('playing');
-                    store.setActiveScreen('battle');
+                    if (isSimulationPaused) return;
                     setManualUltimateRequest({
                       heroId,
-                      force: true,
+                      force: false,
                       seq: Date.now(),
                     });
                   }}
