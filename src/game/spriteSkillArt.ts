@@ -158,8 +158,29 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
         [size * 0.62 * opening, -size * 0.55], [size * 0.5 * opening, size * 0.25],
         [0, size * 0.85], [-size * 0.5 * opening, size * 0.25]], true);
       ctx.strokeStyle = art.accent;
-      path([[0, -size * 0.35], [0, size * 0.35]]);
-      if (!passive) path([[-size * 0.22, 0], [size * 0.22, 0]]);
+      if (passive && art.motif === 'aegis') {
+        // Lucius: a small cross of light inside the actual protective ward.
+        path([[0, -size * 0.4], [0, size * 0.4]]);
+        path([[-size * 0.28, -size * 0.08], [size * 0.28, -size * 0.08]]);
+      } else if (passive && art.motif === 'blades') {
+        // Thane: paired open blade edges, never an extra passive attack.
+        path([[-size * 0.3, size * 0.28], [size * 0.18, -size * 0.4], [size * 0.12, -size * 0.08]]);
+        path([[size * 0.3, size * 0.28], [-size * 0.18, -size * 0.4], [-size * 0.12, -size * 0.08]]);
+      } else if (passive && art.motif === 'bastion') {
+        path([[-size * 0.32, 0], [0, -size * 0.32], [size * 0.32, 0]]);
+        path([[0, -size * 0.32], [0, size * 0.4]]);
+      } else if (passive && art.motif === 'embers') {
+        path([[-size * 0.3, size * 0.3], [-size * 0.32, -size * 0.02], [0, -size * 0.42],
+          [size * 0.06, -size * 0.12], [size * 0.28, size * 0.06], [size * 0.2, size * 0.3]]);
+        path([[0, size * 0.3], [size * 0.02, size * 0.02]]);
+      } else if (passive && art.motif === 'scripture') {
+        path([[-size * 0.32, -size * 0.3], [0, -size * 0.12], [size * 0.32, -size * 0.3]]);
+        path([[-size * 0.32, size * 0.2], [0, size * 0.38], [size * 0.32, size * 0.2]]);
+        path([[0, -size * 0.12], [0, size * 0.38]]);
+      } else {
+        path([[0, -size * 0.35], [0, size * 0.35]]);
+        if (!passive) path([[-size * 0.22, 0], [size * 0.22, 0]]);
+      }
       ctx.restore(); ctx.restore(); return true;
     }
     // Blessings are local to the real recipient: never send a weapon or attack ribbon at an ally.

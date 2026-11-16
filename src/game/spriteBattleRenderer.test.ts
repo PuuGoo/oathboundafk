@@ -403,6 +403,48 @@ test('actual Palmer stat buffs retain their type and never imitate a shielding o
   assert.equal(createSpriteEffect(ward, tank, recipient)!.supportBuff, undefined);
 });
 
+test('actual opening passive wards retain five distinct compact hero marks on LOW and reduced motion', () => {
+  const expected = ['celestial_guardian', 'astral_blademaster', 'iron_bastion', 'hero_68_rigby', 'dawn_oracle'];
+  const signatures = new Map<string, string[]>();
+  for (const heroId of expected) {
+    const initial = createInitialData();
+    const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+    const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
+      enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+    const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+    const wards = sim.consumeEvents().filter(e => e.sourceId === source.instanceId && e.type === 'shield' && e.skillSlot === 'passive');
+    assert.equal(wards.length, 1, 'only the actual initialized passive shield is presented');
+    assert.ok(wards[0].value! > 0);
+    assert.equal(wards[0].targetId, source.instanceId);
+    const effect = createSpriteEffect(wards[0], source, source)!;
+    const heroSignatures: string[] = [];
+    for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
+      effect.age = effect.duration * 0.5;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: (_, name, value) => { if (name === 'shadowBlur') assert.equal(value, 0); return true; } }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
+      const b = projectSpritePosition(source.x, source.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
+      assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', b.x, b.y - 48 * scale]]);
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'createRadialGradient'].includes(String(c[0]))), false);
+      assert.equal(calls.filter(c => c[0] === 'closePath').length, 1, 'one shared compact protective outline');
+      const points = calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0])));
+      for (const c of points) assert.ok(Math.abs(Number(c[1])) <= 14 * scale && Math.abs(Number(c[2])) <= 14 * scale);
+      heroSignatures.push(JSON.stringify(points));
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+    assert.equal(heroSignatures[0], heroSignatures[1], 'LOW preserves the signature');
+    assert.equal(heroSignatures[2], heroSignatures[3], 'LOW preserves the reduced-motion signature');
+    signatures.set(heroId, heroSignatures);
+    sim.step(50);
+    assert.equal(sim.consumeEvents().filter(e => e.sourceId === source.instanceId && e.type === 'shield' && e.skillSlot === 'passive').length, 0);
+  }
+  for (let mode = 0; mode < 4; mode++) assert.equal(new Set([...signatures.values()].map(s => s[mode])).size, expected.length,
+    'passive marks differ by geometry, not just color, for all five real opening wards');
+});
+
 test('real opening and ultimate shield outcomes use small local crests without replaying body wards', () => {
   let openingCount = 0, ultimateCount = 0;
   for (const hero of OATHBOUND_HEROES) {
