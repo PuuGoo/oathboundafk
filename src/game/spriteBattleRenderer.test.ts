@@ -1926,6 +1926,17 @@ test('actual Estrilda ultimate release flies short oriented lance tips rather th
       const a = projectSpritePosition(source.x, source.y, 390, 530), b = projectSpritePosition(target.x, target.y, 390, 530);
       const scale = Math.min(390 / 480, 530 / 680), bearing = Math.atan2(b.y - 48 * scale - (a.y - 53 * scale), b.x - a.x);
       for (const call of calls.filter(call => call[0] === 'rotate')) assert.equal(call[1], bearing);
+      const moves = calls.filter(call => call[0] === 'translate'); assert.equal(moves.length, count);
+      for (let i = 0; i < count; i++) {
+        const t = Math.max(0, Math.min(1, (phase - 0.18) / 0.32 * 1.3 - i * 0.075));
+        const spread = (i - (count - 1) / 2) * 62 * scale * 0.16 * Math.sin(t * Math.PI);
+        assert.ok(Math.abs(Number(moves[i][1]) - (a.x + (b.x - a.x) * t - Math.sin(bearing) * spread)) < 1e-8);
+        assert.ok(Math.abs(Number(moves[i][2]) - (a.y - 53 * scale + (b.y - a.y + 5 * scale) * t + Math.cos(bearing) * spread)) < 1e-8);
+      }
+      assert.equal(calls.filter(call => call[0] === 'lineTo').length, count * 4, 'short shaft and barbed head only, no world-space trails');
+      for (const call of calls.filter(call => ['moveTo', 'lineTo'].includes(String(call[0])))) {
+        assert.ok(Math.hypot(Number(call[1]), Number(call[2])) <= 62 * scale * 0.19, 'entire lance projectile stays compact');
+      }
       for (const tip of tips) {
         assert.equal(tip.length, 4, 'pointed lance head keeps two barbs and central notch');
         const xs = tip.map(call => Number(call[1])), ys = tip.map(call => Number(call[2]));

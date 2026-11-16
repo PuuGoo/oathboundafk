@@ -692,16 +692,18 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.restore(); break;
         }
         case 'volley': {
-          if (art.motif === 'daggers' || art.motif === 'arrows' || art.motif === 'crossfire') {
+          if (['daggers', 'arrows', 'crossfire', 'lance'].includes(art.motif)) {
             // Short weapons fan across the bearing and close on the real victim.
-            const arrows = art.motif === 'arrows', bullets = art.motif === 'crossfire';
-            const count = arrows || bullets ? lowQuality ? 3 : 5 : lowQuality ? 2 : 4;
+            const daggers = art.motif === 'daggers', arrows = art.motif === 'arrows', bullets = art.motif === 'crossfire';
+            const count = daggers ? lowQuality ? 2 : 4 : lowQuality ? 3 : 5;
+            const spreadScale = arrows ? 0.22 : bullets ? 0.12 : daggers ? 0.18 : 0.16;
+            const size = radius * (bullets ? 0.14 : daggers ? 0.16 : 0.18);
             const bearing = Math.atan2(by - ay, bx - ax);
             for (let i = 0; i < count; i++) {
               const t = Math.max(0, Math.min(1, travel * 1.3 - i * 0.075));
-              const spread = (i - (count - 1) / 2) * radius * (arrows ? 0.22 : bullets ? 0.12 : 0.18) * Math.sin(t * Math.PI);
+              const spread = (i - (count - 1) / 2) * radius * spreadScale * Math.sin(t * Math.PI);
               weapon(ax + (bx - ax) * t - Math.sin(bearing) * spread,
-                ay + (by - ay) * t + Math.cos(bearing) * spread, radius * (arrows ? 0.18 : bullets ? 0.14 : 0.16));
+                ay + (by - ay) * t + Math.cos(bearing) * spread, size);
             }
             break;
           }
