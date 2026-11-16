@@ -128,6 +128,12 @@ try {
     ['damage impact', ':impact:']]) {
     assert.ok(drawnKeys.some(key => key.includes(needle)), `no Blender-drawn ${label} observed`);
   }
+  // Mỗi hero đang bật trong nhóm phải thật sự có ít nhất một hiệu ứng do GLB vẽ.
+  for (const heroId of group) {
+    if (!HERO_VFX_DEFINITIONS.some(definition => definition.heroId === heroId)) continue;
+    assert.equal(result.models[heroId], 'ready', `${heroId}: effect asset never became ready`);
+    assert.ok(drawnKeys.some(key => key.startsWith(heroId + ':')), `${heroId}: no Blender-drawn effect observed`);
+  }
   result.activeObserved = drawnKeys.some(key => key.includes(':cast:active'));
   // Pause phải giữ nguyên pixel canvas và tuổi effect.
   await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });

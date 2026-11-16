@@ -1,0 +1,56 @@
+{
+  "id": "estrilda",
+  "heroId": "estrilda",
+  "name": "Estrilda",
+  "family": "lance",
+  "source": "assets-source/vfx/estrilda/estrilda.blend",
+  "asset": "estrilda.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Th\u00e9p b\u1ea1c, kh\u0103n y\u00ean \u0111\u1ecf th\u1eabm v\u00e0 m\u0169i th\u01b0\u01a1ng b\u0103ng lam d\u00e0i tr\u00ean ng\u1ef1a.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 41
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 41
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 41
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 41
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 239440,
+    "glbSha256": "d1f038ffcd7fae805b81ca677d32452d3e2ae9f5c6043e25aa057270e570cfee",
+    "generatorSha256": "a1d6778df7cf6e0117df056905e8cca7a6f27c1a266babfd387fb30b4db4c1d4",
+    "specSha256": "f2ec7e82636114c1d9e594da9b0da452282b0f3b6d05f5f95eebd8f0ea6d85bd",
+    "objects": 15,
+    "vertices": 1567,
+    "triangles": 3090,
+    "meshes": 15,
+    "materials": 3
+  }
+}

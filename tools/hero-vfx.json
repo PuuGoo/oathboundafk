@@ -1,3 +1,4 @@
 [
-  {"id":"belinda","heroId":"belinda","family":"sigil","name":"Belinda","primary":"fff2c8","secondary":"7fd8ff","accent":"ffc061","intensity":1.0,"note":"Golden astral sigil, orbiting rings and star motes for holy arcane casts."}
+  {"id":"belinda","heroId":"belinda","family":"sigil","name":"Belinda","primary":"fff2c8","secondary":"7fd8ff","accent":"ffc061","intensity":1.0,"note":"Golden astral sigil, orbiting rings and star motes for holy arcane casts."},
+  {"id":"estrilda","heroId":"estrilda","family":"lance","name":"Estrilda","primary":"dfe6ee","secondary":"8e3141","accent":"7cc9f0","intensity":1.05,"note":"Thép bạc, khăn yên đỏ thẫm và mũi thương băng lam dài trên ngựa."}
 ]

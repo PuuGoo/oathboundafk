@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSpriteEffect } from './spriteBattleEffects';
+import { OATHBOUND_HEROES } from './oathboundHeroes';
 import { getCombatTimeline } from './skillTimelines';
 import type { BattleUnitRuntime, CombatEvent } from './types';
 import type { SpriteEffect } from './spriteBattleEffects';
@@ -27,8 +28,13 @@ test('only roster heroes with a committed Blender effect resolve, by stable hero
   const definition = getHeroVfx('belinda');
   assert.equal(definition?.url, '/assets/vfx/belinda.glb');
   assert.equal(getHeroVfx('rowan'), undefined, 'a hero without an effect asset stays Canvas2D');
-  assert.deepEqual(HERO_VFX_DEFINITIONS.map(entry => entry.heroId), ['belinda']);
-  assert.equal(new Set(HERO_VFX_DEFINITIONS.map(entry => entry.url)).size, HERO_VFX_DEFINITIONS.length);
+  assert.ok(HERO_VFX_DEFINITIONS.length > 0, 'at least one hero must ship an effect');
+  for (const entry of HERO_VFX_DEFINITIONS) {
+    assert.ok(OATHBOUND_HEROES.some(hero => hero.heroId === entry.heroId), `${entry.heroId} must be a roster hero`);
+    assert.match(entry.url, /^\/assets\/vfx\/[a-z0-9-]+\.glb$/);
+  }
+  assert.equal(new Set(HERO_VFX_DEFINITIONS.map(entry => entry.url)).size, HERO_VFX_DEFINITIONS.length,
+    'each hero needs its own effect file');
 });
 
 test('cast effects request the clip of their real slot; outcomes request the impact clip', () => {
