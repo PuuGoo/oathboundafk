@@ -1,0 +1,56 @@
+{
+  "id": "thane",
+  "heroId": "astral_blademaster",
+  "name": "Thane",
+  "family": "strike",
+  "source": "assets-source/vfx/thane/thane.blend",
+  "asset": "thane.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Ba l\u01b0\u1ee1i li\u1ec1m b\u1ea1c xanh c\u1ee7a ki\u1ebfm s\u0129 m\u1ed9t tay, v\u00f2ng ch\u1ea1m v\u00e0 m\u1ea3nh b\u0103ng.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 43
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 43
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 43
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 43
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 205844,
+    "glbSha256": "a43f86ac578332132541ec16b17fa7b494c0509cba3397d48b37ae14a4081f0b",
+    "generatorSha256": "24f55d7444e8e8de5c676f70860841bacbddb932048905d5d6cc5f49394e5192",
+    "specSha256": "c293331c7deb29f851e02a753e7edccdfb0d942635c7bed81c1b375035f2bdc9",
+    "objects": 15,
+    "vertices": 568,
+    "triangles": 932,
+    "meshes": 15,
+    "materials": 3
+  }
+}
