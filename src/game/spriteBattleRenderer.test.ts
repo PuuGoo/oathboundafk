@@ -593,26 +593,37 @@ test('actual Eluard active charge unfolds a caster-local faceted prism without g
     assert.ok(cast, `${heroId}: actual active must occur`);
     const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.active.targetType);
     assert.notEqual(target.team, source.team);
-    assert.ok(entries.some(event => event.castId === cast.castId && event.type === 'damage' && event.targetId === target.instanceId));
+    assert.ok(entries.some(event => event.castId === cast.castId && event.type === 'damage' && event.targetId === target.instanceId && event.value! > 0));
     const effect = createSpriteEffect(cast, source, target)!;
-    effect.age = effect.duration * 0.12;
+    for (const phase of [0.08, 0.14]) {
+    effect.age = effect.duration * phase;
     const before = structuredClone(effect);
-    for (const [reduced, low] of [[false, false], [false, true], [true, true]]) {
+    for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
       const calls: unknown[][] = [];
       const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
         calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
       }, set: () => true }) as CanvasRenderingContext2D;
       drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
       assert.equal(calls.some(call => call[0] === 'rotate'), false, 'charge is a growing prism, not a rotating diamond wheel');
+      assert.equal(calls.some(call => ['fill', 'createRadialGradient', 'arc', 'ellipse'].includes(String(call[0]))), false,
+        `${heroId}: charge remains transparent without a shared body halo`);
       if (!reduced) {
-        assert.ok(calls.filter(call => call[0] === 'closePath').length >= 3, 'three outlined crystal facets remain on LOW');
+        assert.equal(calls.filter(call => call[0] === 'closePath').length, 3, 'three outlined crystal facets remain on LOW');
+        assert.equal(calls.filter(call => call[0] === 'stroke').length, 6, 'each facet retains its outline and spine');
         const a = projectSpritePosition(source.x, source.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
         assert.ok(calls.some(call => call[0] === 'translate' && call[1] === a.x && call[2] === a.y - 53 * scale));
+        const size = 43 * scale * (0.22 + phase / 0.36 * 0.3);
+        const spread = size * (heroId === 'hero_248_eluard' ? 0.9 : 0.6);
+        for (const call of calls.filter(call => call[0] === 'moveTo' || call[0] === 'lineTo')) {
+          assert.ok(Math.abs(Number(call[1])) <= spread + size * 0.35 + 1e-9);
+          assert.ok(Math.abs(Number(call[2])) <= size + 1e-9);
+        }
       }
       assert.ok(calls.some(call => call[0] === 'stroke'), 'reduced motion retains static feedback');
       assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
       for (const call of calls) for (const value of call.slice(1)) if (typeof value === 'number') assert.ok(Number.isFinite(value));
       assert.deepEqual(effect, before);
+    }
     }
   }
 });
