@@ -591,6 +591,12 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           ctx.fillStyle = art.accent;
           path([[size, 0], [size * 0.35, -size * 0.2], [size * 0.5, 0], [size * 0.35, size * 0.2]], true, true);
           ctx.restore();
+        } else if (art.motif === 'daggers' && effect.sourceHeroId === 'oscar' && effect.ultimate) {
+          const bearing = Math.atan2(by - ay, bx - ax), count = lowQuality ? 2 : 4;
+          for (let i = 0; i < count; i++) {
+            const spread = (i - (count - 1) / 2) * radius * (0.12 + charge * 0.04);
+            weapon(-Math.sin(bearing) * spread, Math.cos(bearing) * spread, radius * (0.12 + charge * 0.06));
+          }
         } else weapon(0, 0, size);
       } else if (art.motif === 'prism') {
         const size = radius * (0.22 + charge * 0.3);
