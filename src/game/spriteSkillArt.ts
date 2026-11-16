@@ -204,7 +204,7 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
       const flower = (x: number, y: number, size: number) => {
         for (let i = 0; i < 5; i++) {
           const angle = i * Math.PI * 2 / 5 - Math.PI / 2;
-          ctx.fillStyle = art.primary; ctx.strokeStyle = art.accent;
+          ctx.fillStyle = effect.ultimate ? effect.color : art.primary; ctx.strokeStyle = art.accent;
           ctx.beginPath(); ctx.ellipse(x + Math.cos(angle) * size * 0.42 * opening,
             y + Math.sin(angle) * size * 0.42 * opening, size * 0.5, size * 0.28, angle, 0, Math.PI * 2);
           ctx.fill(); ctx.stroke();

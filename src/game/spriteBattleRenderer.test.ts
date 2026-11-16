@@ -227,10 +227,12 @@ test('actual Sonja active blessing blooms roses at the allied recipient without 
   const before = structuredClone(effect);
   for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
     const calls: unknown[][] = [];
+    let fillStyle: unknown;
     const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
-      calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
-    }, set: () => true }) as CanvasRenderingContext2D;
+      calls.push([String(name), ...args, ...(name === 'fill' ? [fillStyle] : [])]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
+    }, set: (_, name, value) => { if (name === 'fillStyle') fillStyle = value; return true; } }) as CanvasRenderingContext2D;
     drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
+    assert.deepEqual(calls.filter(c => c[0] === 'fill').slice(0, 5).map(c => c[1]), Array(5).fill(getSpriteSkillArt('sonja')!.primary), 'active blessing retains pink petals');
     const petals = calls.filter(call => call[0] === 'ellipse');
     const petalLimit = 43 * Math.min(390 / 480, 530 / 680) * 0.29 * 0.5;
     assert.equal(petals.length, 5, 'five-petal rose remains recognizable without a shared recipient halo on LOW/reduced');
@@ -241,6 +243,45 @@ test('actual Sonja active blessing blooms roses at the allied recipient without 
     const b = projectSpritePosition(target.x, target.y, 390, 530), scale = Math.min(390 / 480, 530 / 680);
     assert.ok(calls.some(call => call[0] === 'translate' && call[1] === b.x && call[2] === b.y - 48 * scale));
     assert.equal(calls.filter(call => call[0] === 'save').length, calls.filter(call => call[0] === 'restore').length);
+    assert.deepEqual(effect, before);
+  }
+});
+
+test('actual Sonja Gold Roses ultimate uses golden recipient petals on normal LOW and reduced motion', () => {
+  const initial = createInitialData(), heroId = 'sonja';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes: initial.ownedHeroes,
+    enemies: getCampaignStage(1).enemies, seed: 2201, autoUltimate: false });
+  const source = sim.getUnits().find(u => u.heroId === heroId && u.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const events = sim.consumeEvents(), cast = events.find(e => e.type === 'ultimate_cast' && e.sourceId === source.instanceId)!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, events, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.equal(target.team, source.team);
+  assert.ok(events.some(e => e.castId === cast.castId && e.targetId === target.instanceId && ['heal', 'buff'].includes(e.type)));
+  const effect = createSpriteEffect(cast, source, target)!;
+  assert.equal(effect.support, true);
+  assert.equal(effect.color, getHeroById(heroId).skills.ultimate.vfxColor);
+  assert.notEqual(effect.color, getSpriteSkillArt(heroId)!.primary, 'ultimate palette differs from active pink');
+  for (const phase of [0.15, 0.5, 0.85]) for (const [reduced, low] of [[false, false], [false, true], [true, false], [true, true]]) {
+    effect.age = effect.duration * phase;
+    const before = structuredClone(effect), calls: unknown[][] = [];
+    let fillStyle: unknown;
+    const ctx = new Proxy({}, { get: (_, key) => key === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+      calls.push([String(key), ...args, ...(key === 'fill' ? [fillStyle] : [])]);
+      return String(key).startsWith('create') ? { addColorStop() {} } : undefined;
+    }, set: (_, key, value) => { if (key === 'fillStyle') fillStyle = value; return true; } }) as CanvasRenderingContext2D;
+    drawSpriteSkillArt(ctx, effect, 390, 530, reduced, low);
+    const flowers = low || reduced ? 1 : 3, fills = calls.filter(c => c[0] === 'fill');
+    assert.equal(fills.length, flowers * 6);
+    for (let i = 0; i < flowers; i++) {
+      for (let petal = 0; petal < 5; petal++) assert.equal(fills[i * 6 + petal][1], effect.color, 'Gold Roses petals use actual golden ultimate palette');
+      assert.equal(fills[i * 6 + 5][1], getSpriteSkillArt(heroId)!.accent);
+    }
+    const scale = Math.min(390 / 480, 530 / 680), b = projectSpritePosition(target.x, target.y, 390, 530);
+    assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', b.x, b.y - 48 * scale]]);
+    assert.equal(calls.some(c => ['rotate', 'quadraticCurveTo', 'bezierCurveTo', 'createRadialGradient'].includes(String(c[0]))), false, 'no offensive travel toward allies');
+    assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
     assert.deepEqual(effect, before);
   }
 });
