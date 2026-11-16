@@ -762,6 +762,52 @@ test('actual cast ground anticipation respects caller opacity without changing i
   }
 });
 
+test('actual Belinda ultimate release descends as open branched light rays at the real victim', () => {
+  const initial = createInitialData(), heroId = 'belinda';
+  const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;
+  const ownedHeroes = Object.fromEntries(Object.entries(initial.ownedHeroes).map(([id, hero]) => [id,
+    { ...hero, level: 12, stars: 2, equipment: { weapon: 1, armor: 1, relic: 1 } }]));
+  const sim = new BattleSimulation({ allyFormation: formation, ownedHeroes, enemies: getCampaignStage(1).enemies,
+    seed: 2201, autoUltimate: false, maxDurationMs: 90000 });
+  const source = sim.getUnits().find(unit => unit.heroId === heroId && unit.team === 'ally')!;
+  sim.consumeEvents(); assert.equal(sim.triggerUltimate(source.instanceId, true), true);
+  const entries = sim.consumeEvents(), cast = entries.find(e => e.sourceId === source.instanceId && e.type === 'ultimate_cast')!;
+  assert.ok(cast);
+  const target = resolveSpriteEffectTarget(cast, entries, sim.getUnits(), source, getHeroById(heroId).skills.ultimate.targetType);
+  assert.notEqual(target.team, source.team);
+  assert.ok(entries.some(e => e.sourceId === source.instanceId && e.castId === cast.castId &&
+    e.targetId === target.instanceId && e.type === 'damage' && e.value! > 0));
+  const effect = createSpriteEffect(cast, source, target)!;
+  for (const low of [false, true]) {
+    let previousTip = -Infinity;
+    for (const phase of [0.36, 0.42]) {
+      effect.age = effect.duration * phase;
+      const before = structuredClone(effect), calls: unknown[][] = [];
+      const ctx = new Proxy({}, { get: (_, name) => name === 'globalAlpha' ? 1 : (...args: unknown[]) => {
+        calls.push([String(name), ...args]); return String(name).startsWith('create') ? { addColorStop() {} } : undefined;
+      }, set: (_, name, value) => { calls.push(['set', String(name), value]); return true; } }) as CanvasRenderingContext2D;
+      drawSpriteSkillArt(ctx, effect, 390, 530, false, low);
+      const scale = Math.min(390 / 480, 530 / 680), radius = 62 * scale, count = low ? 2 : 3;
+      const b = projectSpritePosition(target.x, target.y, 390, 530);
+      assert.deepEqual(calls.filter(c => c[0] === 'translate'), [['translate', b.x, b.y - 48 * scale]]);
+      assert.equal(calls.some(c => ['fill', 'arc', 'ellipse', 'rotate', 'closePath', 'createRadialGradient'].includes(String(c[0]))), false,
+        'open light rays replace the generic pillar and ring without an opaque body cover');
+      assert.equal(calls.filter(c => c[0] === 'stroke').length, count * 3, 'each ray has a shaft and two separate branches on LOW too');
+      const points = calls.filter(c => ['moveTo', 'lineTo'].includes(String(c[0])));
+      assert.equal(points.length, count * 6);
+      const tip = Number(points[1][2]);
+      assert.ok(tip > previousTip && tip < 0, 'ray tips descend toward the actual recipient');
+      previousTip = tip;
+      for (const c of points) {
+        assert.ok(Math.abs(Number(c[1])) <= radius * 0.6);
+        assert.ok(Number(c[2]) >= -radius * 2.4 && Number(c[2]) <= radius * 0.2);
+      }
+      assert.equal(calls.filter(c => c[0] === 'save').length, calls.filter(c => c[0] === 'restore').length);
+      assert.deepEqual(effect, before);
+    }
+  }
+});
+
 test('actual Fawkes ultimate release converges outlined coffin seals without generic orbit diamonds', () => {
   const initial = createInitialData(), heroId = 'fawkes';
   const formation = [heroId, ...initial.formation.filter(id => id !== heroId)].slice(0, 5) as TeamFormationSlots;

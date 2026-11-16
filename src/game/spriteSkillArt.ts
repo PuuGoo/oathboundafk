@@ -699,6 +699,23 @@ export function drawSpriteSkillArt(ctx: CanvasRenderingContext2D, effect: Sprite
           }
           break;
         case 'pillar': {
+          if (art.motif === 'seraph') {
+            // Separated, open light rays descend into the real victim; no shared pillar ring or opaque beam.
+            const count = lowQuality ? 2 : 3;
+            ctx.save(); ctx.translate(bx, by);
+            for (let i = 0; i < count; i++) {
+              const offset = i - (count - 1) / 2;
+              const x = offset * radius * 0.38 * (1 - travel * 0.35);
+              const y = -radius * (2 * (1 - travel) + Math.abs(offset) * 0.08);
+              ctx.strokeStyle = i % 2 ? art.accent : art.primary;
+              path([[x + offset * radius * 0.08, y - radius * 0.42], [x, y]]);
+              ctx.strokeStyle = art.accent;
+              for (const side of [-1, 1]) {
+                path([[x + side * radius * 0.13, y - radius * 0.23], [x, y - radius * 0.06]]);
+              }
+            }
+            ctx.restore(); break;
+          }
           const y = by - radius * 2.3 * (1 - travel);
           ctx.lineWidth = (effect.ultimate ? 4 : 2) * scale;
           path([[bx, y - radius * 0.5], [bx, y]]);
