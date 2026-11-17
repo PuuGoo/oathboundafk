@@ -1,0 +1,56 @@
+{
+  "id": "walker",
+  "heroId": "walker",
+  "name": "Walker",
+  "family": "gunfire",
+  "source": "assets-source/vfx/walker/walker.blend",
+  "asset": "walker.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Ch\u1edbp n\u00f2ng k\u00e9p v\u00e0ng \u0111\u1ed3ng, v\u1ec7t \u0111\u1ea1n d\u00e0y v\u00e0 v\u00f2ng xung k\u00edch cho shotgun c\u1ee7a Walker.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 86
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 86
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 86
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 86
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 408784,
+    "glbSha256": "d3032801dd5ee5ac3c3a7688d3dab4d145730cb5dae8b64cfd6bbd00a578c2bf",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "5e625423dc972c54935e76f311dfa128fd45f421d6821576fe50232d63abcb50",
+    "objects": 30,
+    "vertices": 981,
+    "triangles": 1846,
+    "meshes": 30,
+    "materials": 3
+  }
+}

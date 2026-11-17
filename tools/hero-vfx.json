@@ -14,5 +14,6 @@
   {"id":"oscar","heroId":"oscar","family":"volley","name":"Oscar","primary":"e0e5ef","secondary":"6b6b89","accent":"a9c8e1","intensity":1.05,"note":"Loạt dao bạc của quản gia, vệt xanh lạnh và vòng chạm ngắn."},
   {"id":"eluard","heroId":"eluard","family":"bloom","name":"Eluard","primary":"ece4d1","secondary":"587e95","accent":"79cde2","intensity":1.05,"note":"Hào quang vàng ngà, cột sáng xanh và hạt thánh quanh quả cầu của Eluard."},
   {"id":"eluard-awakened","heroId":"hero_248_eluard","family":"sigil","name":"Eluard - Catalyst of Fate","primary":"d6e8ed","secondary":"354f79","accent":"71e3e4","intensity":1.15,"note":"Vòng sao tinh hà, nan số mệnh và hạt xanh băng quanh đồng hồ cát của Eluard thức tỉnh."},
-  {"id":"peggy","heroId":"hero_107_peggy","family":"bloom","name":"Peggy","primary":"e29cba","secondary":"f5e6d4","accent":"b7b9ee","intensity":1.1,"note":"Cánh hoa hồng phấn, vương miện sáng và hạt tím quanh quyền trượng công chúa."}
+  {"id":"peggy","heroId":"hero_107_peggy","family":"bloom","name":"Peggy","primary":"e29cba","secondary":"f5e6d4","accent":"b7b9ee","intensity":1.1,"note":"Cánh hoa hồng phấn, vương miện sáng và hạt tím quanh quyền trượng công chúa."},
+  {"id":"walker","heroId":"walker","family":"gunfire","name":"Walker","primary":"f4d3a0","secondary":"4a3d40","accent":"e5b05a","intensity":1.2,"note":"Chớp nòng kép vàng đồng, vệt đạn dày và vòng xung kích cho shotgun của Walker."}
 ]
