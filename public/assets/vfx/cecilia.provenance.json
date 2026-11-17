@@ -1,0 +1,56 @@
+{
+  "id": "cecilia",
+  "heroId": "cecilia",
+  "name": "Cecilia",
+  "family": "strike",
+  "source": "assets-source/vfx/cecilia/cecilia.blend",
+  "asset": "cecilia.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "L\u01b0\u1ee1i ki\u1ebfm b\u1ea1c giao nhau, m\u1ea3nh t\u00edm v\u00e0 v\u00f2ng tr\u1ea5n \u00e1p c\u1ee7a n\u1eef th\u1ea9m ph\u00e1n.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 43
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 43
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 43
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 43
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 205424,
+    "glbSha256": "1424b5081374ed3ccdbd79a5aaf3483c9b7046dc5dfe5508e8506dfc959a6e15",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "76ae88f0739e2c6bdfc77e63f2f1a4bf5745a674d7c57d682e8a2a73f46a724b",
+    "objects": 15,
+    "vertices": 529,
+    "triangles": 902,
+    "meshes": 15,
+    "materials": 3
+  }
+}
