@@ -1,0 +1,56 @@
+{
+  "id": "peggy",
+  "heroId": "hero_107_peggy",
+  "name": "Peggy",
+  "family": "bloom",
+  "source": "assets-source/vfx/peggy/peggy.blend",
+  "asset": "peggy.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "C\u00e1nh hoa h\u1ed3ng ph\u1ea5n, v\u01b0\u01a1ng mi\u1ec7n s\u00e1ng v\u00e0 h\u1ea1t t\u00edm quanh quy\u1ec1n tr\u01b0\u1ee3ng c\u00f4ng ch\u00faa.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 69
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 69
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 69
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 69
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 318932,
+    "glbSha256": "d4dc71ec765a3fe1eeb7d9153f3e61efbcadd434153206677c9eec024c48dd63",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "2df79bc0f0c66056c7e134c6006f94ef0764c8540a51bb56ff1d773da4fcc003",
+    "objects": 24,
+    "vertices": 580,
+    "triangles": 1064,
+    "meshes": 24,
+    "materials": 3
+  }
+}
