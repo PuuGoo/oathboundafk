@@ -47,6 +47,8 @@ type Active = {
 
 /** Mức pha với màu chiêu: đủ để đọc ra tướng nào vừa tung, chưa tới mức mất bảng màu sân. */
 const PULSE_TINT_MIX = .62;
+/** Ánh sáng gốc của sân và mức cộng thêm khi tuyệt kỹ đang chạy. */
+const SUN_INTENSITY = 1.5, RIM_INTENSITY = .7, PULSE_SUN_GAIN = 1.6, PULSE_RIM_GAIN = 1;
 
 /**
  * Elevation chosen from the target ellipse instead of a fixed angle: the studio
@@ -97,10 +99,13 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
   syncCamera();
   // Ánh sáng trung tính: màu theme đã nằm trong material của GLB.
   scene.add(new THREE.AmbientLight(0xffffff, .55));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+  const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
+  sun.name = 'arena_sun';
   sun.position.set(-140, 260, 180); scene.add(sun);
-  const rim = new THREE.DirectionalLight(0xbcd4ff, .7);
+  const rim = new THREE.DirectionalLight(0xbcd4ff, RIM_INTENSITY);
+  rim.name = 'arena_rim';
   rim.position.set(160, 120, -200); scene.add(rim);
+  const sunBase = sun.color.clone(), rimBase = rim.color.clone();
 
   const records = new Map<ArenaSceneId, Record_>(ARENA_DEFINITIONS.map(definition => [definition.id, {
     definition, state: 'idle', version: 0,
@@ -262,6 +267,15 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         if (tint === undefined) continue;
         entry.material.color.lerp(pulseTintColor, PULSE_TINT_MIX);
         entry.material.emissive.lerp(pulseTintColor, PULSE_TINT_MIX);
+      }
+      // Cả sân bừng theo nhịp pulse: đèn chính mạnh lên và ngả màu chiêu, tan về rig trung tính.
+      const flash = pulseVisible ? arenaPulseOpacity(sample.progress) : 0;
+      sun.intensity = SUN_INTENSITY + PULSE_SUN_GAIN * flash;
+      rim.intensity = RIM_INTENSITY + PULSE_RIM_GAIN * flash;
+      sun.color.copy(sunBase); rim.color.copy(rimBase);
+      if (flash > 0 && tint !== undefined) {
+        sun.color.lerp(pulseTintColor, PULSE_TINT_MIX * flash);
+        rim.color.lerp(pulseTintColor, PULSE_TINT_MIX * flash * .6);
       }
       // Một world-unit trên mỗi pixel: đĩa bán kính 100 phủ đúng radiusX pixel.
       // Góc nghiêng lấy từ ellipse của frame, nên đĩa luôn khớp cả hai trục.

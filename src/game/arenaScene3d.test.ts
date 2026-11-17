@@ -232,6 +232,50 @@ test('the pulse ring borrows the casting hero colour, then hands the palette bac
   } finally { scene.dispose(); }
 });
 
+test('the whole arena flares with the ultimate, then settles back to its neutral rig', async () => {
+  const definition = at('temple');
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  let lights: THREE.DirectionalLight[] = [];
+  screen.renderer.render = (root: THREE.Scene) => {
+    lights = [];
+    root.traverse(object => { if (object instanceof THREE.DirectionalLight) lights.push(object); });
+  };
+  const light = (name: string): THREE.DirectionalLight => {
+    const found = lights.find(entry => entry.name === name);
+    assert.ok(found, `${name} must exist in the arena rig`);
+    return found;
+  };
+  try {
+    scene.draw(screen.renderer, screen.ctx, definition, frame());
+    await ready(scene, 'temple');
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition, frame()), true);
+    const idleSun = light('arena_sun').intensity, idleRim = light('arena_rim').intensity;
+    const idleColour = light('arena_sun').color.clone();
+    assert.ok(idleSun > 1 && idleSun < 2.5, `neutral key light stays authored (${idleSun})`);
+    assert.ok(idleRim > 0 && idleRim < 1.5, `neutral rim light stays authored (${idleRim})`);
+
+    // Đầu clip pulse: sân sáng hơn hẳn và đèn ngả về màu chiêu của tướng.
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition,
+      frame({ pulseAge: .12, pulseTint: 0xff3322 })), true);
+    const lit = light('arena_sun');
+    assert.ok(lit.intensity > idleSun + .5, `key light must flare (${lit.intensity})`);
+    assert.ok(light('arena_rim').intensity > idleRim, 'rim light follows the same pulse');
+    assert.ok(lit.color.r > lit.color.b + .05, 'the flare carries the hero colour, not just brightness');
+
+    // Hết clip: rig trở lại đúng giá trị gốc, không giữ ánh sáng chiêu.
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 2.6 })), true);
+    assert.equal(light('arena_sun').intensity, idleSun);
+    assert.equal(light('arena_rim').intensity, idleRim);
+    assert.ok(light('arena_sun').color.equals(idleColour), 'key light colour must settle back');
+
+    // Reduced motion: sân đứng yên, không flash.
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition,
+      frame({ pulseAge: .12, pulseTint: 0xff3322, reducedMotion: true })), true);
+    assert.equal(light('arena_sun').intensity, idleSun, 'reduced motion never flashes the stage');
+  } finally { scene.dispose(); }
+});
+
 test('arena fog adds depth to real backdrop vertices while leaving the front clear', async () => {
   for (const definition of ARENA_DEFINITIONS) {
     const screen = surface();
