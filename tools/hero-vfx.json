@@ -12,5 +12,6 @@
   {"id":"cecilia","heroId":"cecilia","family":"strike","name":"Cecilia","primary":"eee8dc","secondary":"45465e","accent":"b5a4e7","intensity":1.1,"note":"Lưỡi kiếm bạc giao nhau, mảnh tím và vòng trấn áp của nữ thẩm phán."},
   {"id":"rigby","heroId":"hero_68_rigby","family":"storm","name":"Rigby","primary":"ffe1a3","secondary":"a34e35","accent":"eda755","intensity":1.05,"note":"Vòng hổ phách, tia lửa bia và mảnh sáng tung quanh cú nện cốc của Rigby."},
   {"id":"oscar","heroId":"oscar","family":"volley","name":"Oscar","primary":"e0e5ef","secondary":"6b6b89","accent":"a9c8e1","intensity":1.05,"note":"Loạt dao bạc của quản gia, vệt xanh lạnh và vòng chạm ngắn."},
-  {"id":"eluard","heroId":"eluard","family":"bloom","name":"Eluard","primary":"ece4d1","secondary":"587e95","accent":"79cde2","intensity":1.05,"note":"Hào quang vàng ngà, cột sáng xanh và hạt thánh quanh quả cầu của Eluard."}
+  {"id":"eluard","heroId":"eluard","family":"bloom","name":"Eluard","primary":"ece4d1","secondary":"587e95","accent":"79cde2","intensity":1.05,"note":"Hào quang vàng ngà, cột sáng xanh và hạt thánh quanh quả cầu của Eluard."},
+  {"id":"eluard-awakened","heroId":"hero_248_eluard","family":"sigil","name":"Eluard - Catalyst of Fate","primary":"d6e8ed","secondary":"354f79","accent":"71e3e4","intensity":1.15,"note":"Vòng sao tinh hà, nan số mệnh và hạt xanh băng quanh đồng hồ cát của Eluard thức tỉnh."}
 ]

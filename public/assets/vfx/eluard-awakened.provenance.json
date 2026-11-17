@@ -1,0 +1,56 @@
+{
+  "id": "eluard-awakened",
+  "heroId": "hero_248_eluard",
+  "name": "Eluard - Catalyst of Fate",
+  "family": "sigil",
+  "source": "assets-source/vfx/eluard-awakened/eluard-awakened.blend",
+  "asset": "eluard-awakened.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "V\u00f2ng sao tinh h\u00e0, nan s\u1ed1 m\u1ec7nh v\u00e0 h\u1ea1t xanh b\u0103ng quanh \u0111\u1ed3ng h\u1ed3 c\u00e1t c\u1ee7a Eluard th\u1ee9c t\u1ec9nh.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 64
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 64
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 64
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 64
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 343248,
+    "glbSha256": "8b61ea949d46b849d1b9be1c2c1e5c30f157b6ec7805067026b4a1552b8220b0",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "559efa595d322c09131e4874eb6feb3831efce63f5cb2744ee87b358a0f3a0ba",
+    "objects": 24,
+    "vertices": 1660,
+    "triangles": 3240,
+    "meshes": 24,
+    "materials": 4
+  }
+}
