@@ -82,6 +82,29 @@ test('Raine gunfire mirrors toward the enemy without mirroring ground rings', as
   scene.dispose();
 });
 
+test('spell light layers blend additively and keep their authored hue', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  scene.draw(screen.renderer, screen.ctx, [cast('ultimate', .5)], 'front', frame);
+  await settle(scene);
+  scene.draw(screen.renderer, screen.ctx, [cast('ultimate', .5)], 'front', frame);
+  const named = new Map<string, THREE.Material>();
+  for (const mesh of screen.captures.at(-1)!.meshes) {
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      named.set(material.name, material);
+    }
+  }
+  for (const name of ['vfx_core', 'vfx_glow', 'vfx_alt', 'vfx_halo']) {
+    const material = named.get(name);
+    assert.ok(material, `${name} must survive the clone`);
+    assert.equal(material!.blending, THREE.AdditiveBlending, `${name} must add light, not paint over the scene`);
+    assert.equal(material!.depthWrite, false, `${name} cannot occlude the fighters`);
+    const color = (material as THREE.MeshBasicMaterial).color;
+    assert.ok(color.r + color.g + color.b > .05, `${name} must keep the colour authored in Blender`);
+  }
+  assert.notEqual(named.get('vfx_core')!.blending, THREE.NormalBlending, 'flat alpha kills the glow read');
+  scene.dispose();
+});
+
 test('projectile remains at contact instead of snapping back during recovery', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   scene.draw(screen.renderer, screen.ctx, [cast('active', .599)], 'front', frame);

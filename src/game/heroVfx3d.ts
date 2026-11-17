@@ -144,14 +144,20 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       const cloned = list.map(material => {
         const existing = copies.get(material);
         if (existing) return existing;
-        const copy = material.clone();
-        copy.transparent = true; copy.depthWrite = false; copy.toneMapped = false; copy.side = THREE.DoubleSide;
-        // Phát sáng giữ màu: strength từ Blender không được làm trắng toàn bộ hiệu ứng.
-        if (copy instanceof THREE.MeshStandardMaterial) {
-          copy.color.copy(copy.emissive).multiplyScalar(.25);
-          copy.emissiveIntensity = material.name === 'vfx_halo' ? .4 : .85;
-        }
         const name = material.name || '';
+        const source = material as Three.MeshStandardMaterial;
+        // Ánh sáng cộng: lấy đúng màu emissive tác giả dựng trong Blender, không nhuộm trắng.
+        const copy = new THREE.MeshBasicMaterial({
+          name,
+          color: source.emissive ? source.emissive.clone() : source.color.clone(),
+          map: source.map ?? null,
+          transparent: true,
+          depthWrite: false,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+        });
+        if (name === 'vfx_halo') copy.color.multiplyScalar(.75);
         const factor = OPACITY_FACTOR[name] ?? 1;
         materials.push({ material: copy, factor, halo: name === 'vfx_halo' });
         copies.set(material, copy);
