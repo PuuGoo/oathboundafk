@@ -116,7 +116,7 @@ try {
   await sleep(400);
   const clip = await evaluate(`(()=>{const box=${canvas}.getBoundingClientRect();return {x:box.x,y:box.y,width:box.width,height:box.height,scale:1}})()`);
   const capture = async () => (await call('Page.captureScreenshot', { format: 'png', clip })).data;
-  // Chụp 5 mốc: tách "simulation tiến" khỏi "một frame render trễ" khi mới pause.
+  // Chụp 5 mốc cách nhau 350 ms; đây là ảnh lấy mẫu, không phải frame render liên tiếp.
   const snapshots = [];
   for (let index = 0; index < 5; index++) {
     const png = Buffer.from(await capture(), 'base64');
@@ -132,17 +132,17 @@ try {
   result.pauseSnapshots = snapshots.map(shot => ({ pixel: shot.pixels.slice(0, 10), elapsedMs: shot.elapsedMs, paused: shot.paused }));
   result.pauseElapsedSettled = snapshots.every(shot => shot.elapsedMs === snapshots[0].elapsedMs);
   result.pauseStableFrom = [0, 1, 2, 3, 4].find(index => stableFrom(index)) ?? null;
-  // Pause có hiệu lực ở frame kế tiếp: cho phép tối đa một frame trễ, sau đó phải đứng yên.
+  // Ghi nhận ổn định từ ảnh nào; không suy ra nguyên nhân thay đổi của ảnh đầu.
   result.pauseAgesStable = new Set(snapshots.map(shot => shot.vfx)).size === 1;
-  result.pauseSettlesWithinOneFrame = result.pauseStableFrom !== null && result.pauseStableFrom <= 1;
+  result.pauseSettlesBySecondSample = result.pauseStableFrom !== null && result.pauseStableFrom <= 1;
   result.pausePixelsStable = result.pauseStableFrom !== null
     && snapshots.length - result.pauseStableFrom >= 3;
   result.pauseStable = result.pauseAgesStable && result.pausePixelsStable
-    && result.pauseElapsedSettled && result.pauseSettlesWithinOneFrame;
+    && result.pauseElapsedSettled && result.pauseSettlesBySecondSample;
   assert.equal(result.pauseElapsedSettled, true, 'Simulation clock advanced while paused');
   assert.equal(result.pauseAgesStable, true, 'Paused effect ages changed');
-  assert.equal(result.pauseSettlesWithinOneFrame, true,
-    `Paused canvas still changing after one settle frame (stable from #${result.pauseStableFrom})`);
+  assert.equal(result.pauseSettlesBySecondSample, true,
+    `Paused canvas still changing after second sample (stable from #${result.pauseStableFrom})`);
   await shot('paused');
   await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='visible'");
   await click("document.querySelector('[data-testid=resume-battle-btn]')");
@@ -192,7 +192,7 @@ try {
     assert.ok(drawnKeys.some(key => key.startsWith(heroId + ':')), `${heroId}: no Blender-drawn effect observed`);
   }
   result.activeObserved = drawnKeys.some(key => key.includes(':cast:active'));
-  // Đo lại sau cửa sổ ×2: hiệu ứng phải tiếp tục được vẽ ở tốc độ gấp đôi.
+  // Chỉ ghi nhận tiếp tục vẽ sau toggle, chưa chứng minh tỷ lệ tiến độ animation.
   await sleep(1200);
   result.x2DrawnAtEnd = (await evaluate(vfxState)).effects?.filter(effect => effect.rendered3d).length || 0;
   assert.deepEqual(result.errors, []);
