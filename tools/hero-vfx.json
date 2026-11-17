@@ -7,5 +7,6 @@
   {"id":"thane","heroId":"astral_blademaster","family":"strike","name":"Thane","primary":"dbe6ef","secondary":"2f6b93","accent":"9dd8f5","intensity":1.1,"note":"Ba lưỡi liềm bạc xanh của kiếm sĩ một tay, vòng chạm và mảnh băng."},
   {"id":"hendrik","heroId":"iron_bastion","family":"strike","name":"Hendrik","primary":"b5b7bd","secondary":"4b5770","accent":"75adcf","intensity":"1.15","note":"Khiên nện: lưỡi liềm thép rộng, vòng xung kích xanh thép và mảnh vụn cho hộ vệ hai khiên."},
   {"id":"rowan","heroId":"rowan","family":"sigil","name":"Rowan","primary":"6f9c78","secondary":"8e5332","accent":"69c9b7","intensity":"1.0","note":"Vòng triệu hồi lá xanh của trượng buôn: vành xoay, hạt vàng và cột sáng cho Rowan."},
-  {"id":"gwyneth","heroId":"gwyneth","family":"volley","name":"Gwyneth","primary":"ddd7c4","secondary":"49735a","accent":"a5d8a4","intensity":"1.05","note":"Loạt tên ngà-xanh lá của cung thủ: mũi tên cung, vệt sáng và vòng chạm."}
+  {"id":"gwyneth","heroId":"gwyneth","family":"volley","name":"Gwyneth","primary":"ddd7c4","secondary":"49735a","accent":"a5d8a4","intensity":"1.05","note":"Loạt tên ngà-xanh lá của cung thủ: mũi tên cung, vệt sáng và vòng chạm."},
+  {"id":"rosaline","heroId":"rosaline","family":"bloom","name":"Rosaline","primary":"d9d4ec","secondary":"ede8dd","accent":"f1b9cd","intensity":"1.0","note":"Cánh hoa hồng phấn, vòng trà sáng và hạt ngà quanh chổi người hầu."}
 ]

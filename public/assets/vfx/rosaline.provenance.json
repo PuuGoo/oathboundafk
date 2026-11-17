@@ -1,0 +1,56 @@
+{
+  "id": "rosaline",
+  "heroId": "rosaline",
+  "name": "Rosaline",
+  "family": "bloom",
+  "source": "assets-source/vfx/rosaline/rosaline.blend",
+  "asset": "rosaline.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "C\u00e1nh hoa h\u1ed3ng ph\u1ea5n, v\u00f2ng tr\u00e0 s\u00e1ng v\u00e0 h\u1ea1t ng\u00e0 quanh ch\u1ed5i ng\u01b0\u1eddi h\u1ea7u.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 54
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 54
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 54
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 54
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 253912,
+    "glbSha256": "fd61695eb2e5465414f24fb0db934e10a15fa00f4ac5aaf7a80ec8af487bfe73",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "766b6b0039bcdd1294c9b09dcac8595282b0d94a275270a0d9e15a8c7abe5b76",
+    "objects": 19,
+    "vertices": 520,
+    "triangles": 964,
+    "meshes": 19,
+    "materials": 3
+  }
+}
