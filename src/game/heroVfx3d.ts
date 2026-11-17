@@ -257,9 +257,19 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       if (renderer.getContext().isContextLost()) { for (const id of handled) dropInstance(id); throw new Error('VFX context lost'); }
       camera.left = -frame.width / 2; camera.right = frame.width / 2;
       camera.top = frame.height / 2; camera.bottom = -frame.height / 2; camera.updateProjectionMatrix();
+      const bloom = layer === 'front' && !frame.low && !frame.reducedMotion && 'filter' in ctx;
       try {
         renderer.render(scene, camera);
         ctx.drawImage(renderer.domElement, 0, 0, frame.width, frame.height);
+        if (bloom) {
+          // Quầng sáng: vẽ lại buffer đã làm mờ ở chế độ cộng sáng, rộng hơn khung để loang ra.
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = .34;
+          ctx.filter = 'blur(6px)';
+          ctx.drawImage(renderer.domElement, -8, -8, frame.width + 16, frame.height + 16);
+          ctx.restore();
+        }
       } finally {
         for (const instance of drawn) instance.root.visible = false;
       }

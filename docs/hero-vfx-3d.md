@@ -36,12 +36,14 @@ Bảy họ hình học, mỗi họ có tổ hợp part khác nhau và tham số 
 | `storm` | tia chớp tỏa, cầu lệch tâm, vành xung kích | sát thương phép |
 | `gunfire` | chớp đầu nòng, vệt đạn, vòng xung kích | súng |
 
-Material được đặt tên cố định `vfx_core`, `vfx_glow`, `vfx_alt`, `vfx_halo`; runtime đọc tên để gán hệ số mờ riêng (halo mờ nhất) và `low` preset giảm tiếp lớp halo.
+Material được đặt tên cố định `vfx_core`, `vfx_glow`, `vfx_alt`, `vfx_halo`; runtime đọc tên để gán hệ số mờ riêng (halo mờ nhất) và `low` preset giảm tiếp lớp halo. Runtime dựng lại mỗi material thành **MeshBasicMaterial cộng sáng** mang màu `emissive` đã tác giả trong Blender, không ghi depth: hiệu ứng cộng ánh sáng vào sân thay vì phủ một lớp đục che tướng phía sau.
+
+Tổng độ sáng của một lớp có ngân sách (`VFX_STYLE.brightnessBudget`, chi phí = độ mờ × bình phương độ lớn). Khi nhiều tướng cùng tung chiêu vượt ngân sách, cả lớp giảm đều qua `sample.brightness` thay vì cháy trắng; runtime áp hệ số đó vào `material.opacity` thật.
 
 ## Runtime
 
 - `src/game/heroVfx.ts`: chọn clip theo `skillSlot` thật (`basic`/`active`/`ultimate`). Chỉ damage outcome dùng clip `impact`; heal/shield/control/mark giữ art Canvas có ý nghĩa riêng. Phase lấy từ `CombatTimeline` khi có, còn lại theo thời lượng trình diễn, không khẳng định là contact marker của engine. Mỗi batch tối đa 8 hiệu ứng; phần vượt giới hạn giữ Canvas.
-- `src/game/heroVfx3d.ts`: một scene, một camera ortho khớp khung canvas, pool instance theo `effect.id`. Mỗi layer pass render **một lần** rồi composite vào Canvas2D; effect không xử lý được giữ nguyên art Canvas2D.
+- `src/game/heroVfx3d.ts`: một scene, một camera ortho khớp khung canvas, pool instance theo `effect.id`. Mỗi layer pass render **một lần** rồi composite vào Canvas2D; effect không xử lý được giữ nguyên art Canvas2D. Lớp `front` thêm **một** lượt composite nữa: `globalCompositeOperation = 'lighter'`, `filter = blur(6px)`, alpha thấp, phóng 8 px mỗi phía để ánh sáng loang ra (halo/bloom). Lượt này bị bỏ ở `low` preset, reduced-motion và khi môi trường không có `ctx.filter`; trạng thái canvas của caller được `save()`/`restore()`.
 - `hero3d.ts`: `drawSpells` thử GLB trước, sau đó mới tới hiệu ứng Belinda cũ, nên asset lỗi/đang tải không làm mất hiệu ứng nào.
 - Thời gian animation đặt bằng `mixer.setTime` từ tuổi effect; pause và ×2 theo đồng hồ trận đấu. Reduced-motion dùng pose tĩnh trong GLB; LOW giảm lớp halo. Pool tối đa 16 instance, giải phóng material riêng khi loại instance và cache khi đổi trận. Hiệu ứng damage đã phát có thể tiếp tục sau khi caster chết; không phải death freeze.
 - `canvas.dataset.heroVfx.rendered3d` chỉ bật khi **GLB** đã vẽ id đó; `dataset.heroes3d` là model thân nhân vật, `dataset.belindaSpells` là hiệu ứng Belinda cũ — ba nguồn không thay thế nhau.

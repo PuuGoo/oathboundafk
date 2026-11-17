@@ -42,6 +42,7 @@ const realAsset = async (): Promise<LoadedVfx> => {
 };
 const surface = () => {
   const stats = { renders: 0, draws: 0, lost: false };
+  const ops: Array<{ composite: string; filter: string; alpha: number }> = [];
   const captures: Array<{ meshes: THREE.Mesh[]; matrices: number[][] }> = [];
   const renderer = {
     domElement: {},
@@ -54,8 +55,29 @@ const surface = () => {
       captures.push({ meshes, matrices: meshes.map(mesh => mesh.matrixWorld.toArray()) });
     },
   } as unknown as THREE.WebGLRenderer;
-  const ctx = { drawImage: () => { stats.draws++; } } as unknown as CanvasRenderingContext2D;
-  return { renderer, ctx, stats, captures };
+  const stack: Array<{ composite: string; filter: string; alpha: number }> = [];
+  const ctx = {
+    globalCompositeOperation: 'source-over', filter: 'none', globalAlpha: 1,
+    save() {
+      const self = ctx as unknown as { globalCompositeOperation: string; filter: string; globalAlpha: number };
+      stack.push({ composite: self.globalCompositeOperation, filter: self.filter, alpha: self.globalAlpha });
+    },
+    restore() {
+      const previous = stack.pop();
+      if (!previous) return;
+      const self = ctx as unknown as { globalCompositeOperation: string; filter: string; globalAlpha: number };
+      self.globalCompositeOperation = previous.composite; self.filter = previous.filter; self.globalAlpha = previous.alpha;
+    },
+    drawImage: () => {
+      stats.draws++;
+      ops.push({
+        composite: (ctx as unknown as { globalCompositeOperation: string }).globalCompositeOperation,
+        filter: (ctx as unknown as { filter: string }).filter,
+        alpha: (ctx as unknown as { globalAlpha: number }).globalAlpha,
+      });
+    },
+  } as unknown as CanvasRenderingContext2D;
+  return { renderer, ctx, stats, captures, ops };
 };
 
 test('Raine gunfire mirrors toward the enemy without mirroring ground rings', async () => {
@@ -129,6 +151,43 @@ test('a crowded additive layer reaches the screen dimmer than a lone cast', asyn
   scene.dispose();
 });
 
+test('front casts get one additive blur halo and the canvas state is restored', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const effect = cast('active', .5);
+  screen.ctx.globalAlpha = .42;
+  screen.ctx.filter = 'contrast(1.2)';
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+  await settle(scene);
+  screen.ops.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+  assert.equal(screen.ops.length, 2, 'a cast composites itself plus one halo');
+  assert.equal(screen.ops[0].composite, 'source-over');
+  assert.equal(screen.ops[1].composite, 'lighter', 'the halo must add light');
+  assert.match(screen.ops[1].filter, /blur\(/, 'the halo must be soft, not a second hard copy');
+  assert.ok(screen.ops[1].alpha > 0 && screen.ops[1].alpha < .5, 'the halo must stay subordinate');
+  assert.equal(screen.ctx.globalAlpha, .42, 'caller alpha survives the pass');
+  assert.equal(screen.ctx.filter, 'contrast(1.2)', 'caller filter survives the pass');
+  assert.equal(screen.ctx.globalCompositeOperation, 'source-over');
+  screen.ops.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [effect], 'ground', frame);
+  assert.equal(screen.ops.length, 1, 'ground rings do not bloom into the fighters');
+  scene.dispose();
+});
+
+test('the LOW preset skips the halo pass to protect weak GPUs', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const effect = cast('active', .5);
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+  await settle(scene);
+  screen.ops.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', { ...frame, low: true });
+  assert.equal(screen.ops.length, 1, 'LOW keeps the single shared composite');
+  screen.ops.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', { ...frame, reducedMotion: true });
+  assert.equal(screen.ops.length, 1, 'reduced motion keeps the frame cheap and steady');
+  scene.dispose();
+});
+
 test('projectile remains at contact instead of snapping back during recovery', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   scene.draw(screen.renderer, screen.ctx, [cast('active', .599)], 'front', frame);
@@ -153,7 +212,7 @@ test('the committed Blender effect is only handled after it really loads', async
   assert.equal(scene.draw(renderer, ctx, [effect], 'front', frame).size, 0, 'a loading asset never claims the effect');
   await settle(scene);
   assert.deepEqual([...scene.draw(renderer, ctx, [effect], 'front', frame)], [effect.id]);
-  assert.equal(stats.draws, 1, 'one shared composite per layer pass');
+  assert.equal(stats.draws, 2, 'one shared composite plus its halo, never one draw per effect');
   scene.dispose();
 });
 
