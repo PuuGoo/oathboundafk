@@ -141,6 +141,22 @@ test('the ultimate pulse advances one-shot, then idle loops on wall time', async
   scene.dispose();
 });
 
+test('returning from pulse samples the same idle pose as a repeated paused frame', async () => {
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  scene.draw(screen.renderer, screen.ctx, at('temple'), frame());
+  await ready(scene, 'temple');
+  scene.draw(screen.renderer, screen.ctx, at('temple'), frame({ pulseAge: .8 }));
+  scene.draw(screen.renderer, screen.ctx, at('temple'), frame({ wallClock: 1 }));
+  const first = screen.captures.at(-1)!.motes;
+  scene.draw(screen.renderer, screen.ctx, at('temple'), frame({ wallClock: 1 }));
+  const repeated = screen.captures.at(-1)!.motes;
+  assert.ok(first.length > 0);
+  assert.ok(first.every((point, index) => point.distanceTo(repeated[index]) < 1e-6),
+    'first idle frame must not blend the previous pulse action');
+  scene.dispose();
+});
+
 test('reduced motion keeps the arena visible and static', async () => {
   const screen = surface();
   const scene = createArenaScene(THREE, { loadModel: realArena('forest') });

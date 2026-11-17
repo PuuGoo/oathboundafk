@@ -205,11 +205,11 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       for (const [name, action] of current.actions) {
         const wanted = name === sample.clip;
         action.enabled = wanted;
-        if (!wanted) continue;
-        action.paused = false;
-        const clip = record.clips!.get(name)!;
-        current.mixer.setTime(sample.clip === 'idle' ? sample.seconds % clip.duration : Math.min(clip.duration, sample.seconds));
+        if (wanted) action.paused = false;
       }
+      // Tắt toàn bộ action cũ trước khi lấy mẫu, tránh trộn pulse vào frame idle đầu.
+      const clip = record.clips!.get(sample.clip)!;
+      current.mixer.setTime(sample.clip === 'idle' ? sample.seconds % clip.duration : Math.min(clip.duration, sample.seconds));
       // Đặt clip không chạy thì mixer không còn lái transform của nó: phải ẩn tay,
       // nếu không vòng pulse sẽ đứng nguyên ở pose cuối sau khi clip kết thúc.
       const pulseVisible = sample.clip === 'pulse';
