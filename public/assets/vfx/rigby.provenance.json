@@ -1,0 +1,56 @@
+{
+  "id": "rigby",
+  "heroId": "hero_68_rigby",
+  "name": "Rigby",
+  "family": "storm",
+  "source": "assets-source/vfx/rigby/rigby.blend",
+  "asset": "rigby.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "V\u00f2ng h\u1ed5 ph\u00e1ch, tia l\u1eeda bia v\u00e0 m\u1ea3nh s\u00e1ng tung quanh c\u00fa n\u1ec7n c\u1ed1c c\u1ee7a Rigby.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 104
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 104
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 104
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 104
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 499136,
+    "glbSha256": "5b8d15a18347c74552091dfe7e6ee597b387ffd275dc034b8cf5ead616949f17",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "9ab63552c245b02e548a98343719748fcde0d6cbd0775c2252d435bdbe85fcdf",
+    "objects": 36,
+    "vertices": 1354,
+    "triangles": 2572,
+    "meshes": 36,
+    "materials": 3
+  }
+}
