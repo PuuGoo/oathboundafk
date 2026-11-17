@@ -10,5 +10,6 @@
   {"id":"gwyneth","heroId":"gwyneth","family":"volley","name":"Gwyneth","primary":"ddd7c4","secondary":"49735a","accent":"a5d8a4","intensity":"1.05","note":"Loạt tên ngà-xanh lá của cung thủ: mũi tên cung, vệt sáng và vòng chạm."},
   {"id":"rosaline","heroId":"rosaline","family":"bloom","name":"Rosaline","primary":"d9d4ec","secondary":"ede8dd","accent":"f1b9cd","intensity":"1.0","note":"Cánh hoa hồng phấn, vòng trà sáng và hạt ngà quanh chổi người hầu."},
   {"id":"cecilia","heroId":"cecilia","family":"strike","name":"Cecilia","primary":"eee8dc","secondary":"45465e","accent":"b5a4e7","intensity":1.1,"note":"Lưỡi kiếm bạc giao nhau, mảnh tím và vòng trấn áp của nữ thẩm phán."},
-  {"id":"rigby","heroId":"hero_68_rigby","family":"storm","name":"Rigby","primary":"ffe1a3","secondary":"a34e35","accent":"eda755","intensity":1.05,"note":"Vòng hổ phách, tia lửa bia và mảnh sáng tung quanh cú nện cốc của Rigby."}
+  {"id":"rigby","heroId":"hero_68_rigby","family":"storm","name":"Rigby","primary":"ffe1a3","secondary":"a34e35","accent":"eda755","intensity":1.05,"note":"Vòng hổ phách, tia lửa bia và mảnh sáng tung quanh cú nện cốc của Rigby."},
+  {"id":"oscar","heroId":"oscar","family":"volley","name":"Oscar","primary":"e0e5ef","secondary":"6b6b89","accent":"a9c8e1","intensity":1.05,"note":"Loạt dao bạc của quản gia, vệt xanh lạnh và vòng chạm ngắn."}
 ]

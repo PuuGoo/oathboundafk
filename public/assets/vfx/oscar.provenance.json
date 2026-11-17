@@ -1,0 +1,56 @@
+{
+  "id": "oscar",
+  "heroId": "oscar",
+  "name": "Oscar",
+  "family": "volley",
+  "source": "assets-source/vfx/oscar/oscar.blend",
+  "asset": "oscar.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Lo\u1ea1t dao b\u1ea1c c\u1ee7a qu\u1ea3n gia, v\u1ec7t xanh l\u1ea1nh v\u00e0 v\u00f2ng ch\u1ea1m ng\u1eafn.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 87
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 87
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 87
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 87
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 416416,
+    "glbSha256": "539fc0fa414d39c05ba3c9f31f9c336aaa6690187fdff075bc43de70faea94f2",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "6de368e46c04736085a6f6ddc1d4c0af89b73c4e25241c02d553c39ed1cbad94",
+    "objects": 30,
+    "vertices": 1165,
+    "triangles": 2218,
+    "meshes": 30,
+    "materials": 3
+  }
+}

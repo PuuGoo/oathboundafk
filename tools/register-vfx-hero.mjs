@@ -1,6 +1,5 @@
 // PROTOTYPE - NOT FOR PRODUCTION
-// Đăng ký một tướng vào pipeline hiệu ứng: thêm spec vào tools/hero-vfx.json và
-// bật sourceId trong src/game/heroVfx.ts. Không build asset, không commit.
+// Đăng ký vào manifest chung tools/hero-vfx.json. Không build asset, không commit.
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -19,25 +18,15 @@ assert.equal(hero.heroId, heroId, `${sourceId} maps to ${hero.heroId}, not ${her
 for (const value of [primary, secondary, accent]) assert.match(value, /^[0-9a-f]{6}$/, 'colours must be lowercase hex');
 const spec = {
   id: sourceId, heroId, family, name, primary, secondary, accent,
-  intensity: Number(intensity || 1).toFixed(2).replace(/0$/, ''),
+  intensity: Number(intensity || 1),
   note: note || `${name} ${family} effect.`,
 };
 
 const specsPath = path.join(root, 'tools/hero-vfx.json');
+assert.ok(Number.isFinite(spec.intensity) && spec.intensity > 0 && spec.intensity <= 3, 'invalid intensity');
 const specs = JSON.parse(fs.readFileSync(specsPath, 'utf8'));
 assert.equal(specs.some(entry => entry.id === sourceId), false, `${sourceId} already registered`);
 specs.push(spec);
 fs.writeFileSync(specsPath, '[\n' + specs.map(entry => '  ' + JSON.stringify(entry)).join(',\n') + '\n]\n');
 
-const modulePath = path.join(root, 'src/game/heroVfx.ts');
-const source = fs.readFileSync(modulePath, 'utf8');
-const pattern = /const ENABLED = new Set<string>\(\[([^\]]*)\]\);/;
-const match = source.match(pattern);
-assert.ok(match, 'ENABLED set not found');
-const ids = match[1].split(',').map(value => value.trim().replace(/'/g, '')).filter(Boolean);
-assert.equal(ids.includes(sourceId), false, `${sourceId} already enabled`);
-ids.push(sourceId);
-const line = `const ENABLED = new Set<string>([${ids.map(id => `'${id}'`).join(', ')}]);`;
-fs.writeFileSync(modulePath, source.replace(pattern, line));
-
-console.log(JSON.stringify({ registered: spec.id, heroId, family, enabled: ids.length }));
+console.log(JSON.stringify({ registered: spec.id, heroId, family, enabled: specs.length }));

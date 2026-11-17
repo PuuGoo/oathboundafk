@@ -1,6 +1,7 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type { SpriteEffect } from './spriteBattleEffects';
 import { OATHBOUND_HEROES } from './oathboundHeroes';
+import authoredEffects from '../../tools/hero-vfx.json';
 
 /**
  * Blender-authored skill effects. Each enabled hero owns one GLB whose clips are
@@ -24,23 +25,14 @@ export interface HeroVfxDefinition {
   readonly url: string;
 }
 
-/** First five identities keep the authored asset filenames used by the body models. */
-const FILE_OVERRIDES: Readonly<Record<string, string>> = Object.freeze({
-  lancer: 'estrilda', warden: 'lucius', ranger: 'raine', mage: 'belinda', healer: 'fawkes',
-});
-
-/**
- * Heroes whose Blender effect GLB is committed. Adding a source id here is the
- * single switch that turns a hero's 3D skills on; the matching asset and
- * provenance file must land in the same commit.
- */
-const ENABLED = new Set<string>(['lancer', 'mage', 'warden', 'ranger', 'healer', 'thane', 'hendrik', 'rowan', 'gwyneth', 'rosaline', 'cecilia', 'rigby']);
+/** Cùng manifest cho Blender và runtime; prebuild kiểm tra asset/source thật. */
+const authoredByHero = new Map(authoredEffects.map(spec => [spec.heroId, spec]));
 
 export const HERO_VFX_DEFINITIONS: readonly HeroVfxDefinition[] = Object.freeze(
-  OATHBOUND_HEROES.filter(hero => ENABLED.has(hero.sourceId)).map(hero => Object.freeze({
+  OATHBOUND_HEROES.filter(hero => authoredByHero.has(hero.heroId)).map(hero => Object.freeze({
     heroId: hero.heroId,
     sourceId: hero.sourceId,
-    url: `/assets/vfx/${FILE_OVERRIDES[hero.sourceId] || hero.sourceId}.glb`,
+    url: `/assets/vfx/${authoredByHero.get(hero.heroId)!.id}.glb`,
   })),
 );
 
