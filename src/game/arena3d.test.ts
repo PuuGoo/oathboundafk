@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, resolveArenaScene, sampleArenaPulse,
+  arenaLighting, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, resolveArenaScene, sampleArenaPulse,
 } from './arena3d';
+import authoredArenas from '../../tools/arena-themes.json';
 import { getCampaignStage } from './campaign';
 import { resolveSpriteArena } from './spriteBattleRenderer';
 
@@ -60,6 +61,20 @@ test('explicit overrides win on every campaign theme including tempest and obsid
   }
   assert.equal(resolveArenaScene('tempest', 'temple', 'auto')?.id, 'storm');
   assert.equal(resolveArenaScene('obsidian', 'shadow', 'auto')?.id, 'obsidian');
+});
+
+test('character lighting follows each arena palette instead of one white rig', () => {
+  const seen = new Set<number>();
+  for (const definition of ARENA_DEFINITIONS) {
+    const lighting = arenaLighting(definition.id);
+    const spec = authoredArenas.find(entry => entry.id === definition.id)!;
+    assert.equal(lighting.key, Number.parseInt(spec.primary, 16), `${definition.id}: key light is the theme primary`);
+    assert.equal(lighting.rim, Number.parseInt(spec.accent, 16), `${definition.id}: rim light is the theme accent`);
+    assert.equal(lighting.ground, Number.parseInt(spec.secondary, 16), `${definition.id}: bounce is the theme secondary`);
+    assert.ok(lighting.key > 0 && lighting.rim > 0 && lighting.ground > 0, `${definition.id}: no black lights`);
+    seen.add(lighting.rim);
+  }
+  assert.equal(seen.size, ARENA_DEFINITIONS.length, 'every arena must rim-light characters differently');
 });
 
 test('unknown themes degrade to the palette scene instead of throwing', () => {

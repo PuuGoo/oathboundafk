@@ -1,5 +1,7 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 /** Arena themes that have a Blender-authored scene in `public/assets/arenas`. */
+import authoredArenas from '../../tools/arena-themes.json';
+
 export type ArenaSceneId = 'temple' | 'forest' | 'shadow' | 'storm' | 'obsidian';
 
 export interface ArenaDefinition {
@@ -33,6 +35,31 @@ export const ARENA_DEFINITIONS: readonly ArenaDefinition[] = Object.freeze([
 ]);
 
 const byId = new Map(ARENA_DEFINITIONS.map(entry => [entry.id, entry]));
+
+/**
+ * Ánh sáng cho nhân vật, lấy đúng bảng màu của sân: tướng ấm dưới đền thánh,
+ * lạnh dưới bão, tím dưới hầm mộ — để nhân vật hoà vào sân thay vì bị chiếu trắng.
+ */
+export interface ArenaLighting {
+  /** Đèn chính (directional key): màu `primary` của theme. */
+  readonly key: number;
+  /** Đèn viền phía sau: màu `accent`. */
+  readonly rim: number;
+  /** Bầu trời của hemisphere: `primary`. */
+  readonly sky: number;
+  /** Ánh phản chiếu từ sàn: `secondary`. */
+  readonly ground: number;
+}
+
+const hexToRgb = (value: string): number => Number.parseInt(value.slice(0, 6), 16) & 0xffffff;
+
+export function arenaLighting(id: ArenaSceneId): ArenaLighting {
+  const spec = authoredArenas.find(entry => entry.id === id) ?? authoredArenas[0];
+  return Object.freeze({
+    key: hexToRgb(spec.primary), rim: hexToRgb(spec.accent),
+    sky: hexToRgb(spec.primary), ground: hexToRgb(spec.secondary),
+  });
+}
 
 /** Nhịp sáng sân: lên nhanh, giữ ngắn, tan mềm trước khi clip kết thúc. */
 export function arenaPulseOpacity(progress: number): number {

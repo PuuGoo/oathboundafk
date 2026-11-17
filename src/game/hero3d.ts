@@ -9,6 +9,7 @@ import { createHeroVfxScene, type HeroVfxFrame, type LoadedVfx } from './heroVfx
 import { getHeroVfx, HERO_VFX_DEFINITIONS } from './heroVfx';
 import { createArenaScene, type ArenaFrame, type LoadedArena } from './arenaScene3d';
 import type { ArenaDefinition, ArenaSceneId } from './arena3d';
+import { arenaLighting } from './arena3d';
 
 export type HeroClip = 'idle' | 'run' | 'basic' | 'active' | 'ultimate' | 'hit' | 'death';
 export type HeroModelStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -166,9 +167,21 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
   const camera = new THREE.OrthographicCamera(-1.8, 1.8, 2.1, -2.1, .1, 30);
   camera.position.set(-3, 2.1, 7); camera.lookAt(0, 1.35, 0); camera.updateMatrixWorld();
   const anchor = new THREE.Vector3();
-  scene.add(new THREE.HemisphereLight(0xfff4db, 0x62557a, 2.5));
+  const hemi = new THREE.HemisphereLight(0xfff4db, 0x62557a, 2.5);
+  scene.add(hemi);
   const key = new THREE.DirectionalLight(0xffebcc, 3.5); key.position.set(-3, 6, 5); scene.add(key);
   const rim = new THREE.DirectionalLight(0xc2e9ff, 2); rim.position.set(3, 4, -3); scene.add(rim);
+  // Nhân vật lấy màu đèn từ sân đang đấu để hoà vào bảng màu thay vì bị chiếu trắng.
+  let lightingId: ArenaSceneId | undefined;
+  const applyArenaLighting = (id: ArenaSceneId | undefined): void => {
+    if (id === lightingId) return;
+    lightingId = id;
+    const lighting = id ? arenaLighting(id) : undefined;
+    hemi.color.setHex(lighting?.sky ?? 0xfff4db);
+    hemi.groundColor.setHex(lighting?.ground ?? 0x62557a);
+    key.color.setHex(lighting?.key ?? 0xffebcc);
+    rim.color.setHex(lighting?.rim ?? 0xc2e9ff);
+  };
   const records = new Map<string, ModelRecord>(HERO_MODEL_DEFINITIONS.map(model => [model.heroId, {
     heroId: model.heroId, url: model.url, state: 'idle', loadGeneration: 0, inFlight: false,
   }]));
@@ -250,6 +263,8 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
     arenaStatus: (id: ArenaSceneId): string => disposed ? 'failed' : arena.status(id),
     drawArena(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean {
       if (disposed) return false;
+      // Đổi màu đèn nhân vật ngay khi biết sân, kể cả lúc asset sân còn đang tải.
+      applyArenaLighting(definition.id);
       try { return arena.draw(renderer, ctx, definition, frame); }
       catch { return false; }
     },

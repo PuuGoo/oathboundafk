@@ -11,6 +11,7 @@ import type { SpriteEffect } from './spriteBattleEffects';
 import { readFileSync } from 'node:fs';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getHeroModel } from './heroModels';
+import { arenaLighting, ARENA_DEFINITIONS } from './arena3d';
 
 const unit = (patch: Partial<BattleUnitRuntime> = {}) => ({
   instanceId: 'ally-rowan', heroId: 'rowan', isAlive: true, hp: 100,
@@ -98,19 +99,28 @@ function asset() {
 
 function surface() {
   const roots: THREE.Object3D[] = [], scales: number[] = [], sizes: number[][] = [];
+  /** Màu đèn nhân vật theo thứ tự scene: hemisphere, key, rim. */
+  const lights: Array<Array<{ colour: string; ground: string }>> = [];
   let renders = 0, disposals = 0, losses = 0, lost = false;
   const renderer = {
     domElement: {}, setSize: (w: number, h: number) => sizes.push([w, h]), setPixelRatio() {}, setClearColor() {},
     getContext: () => ({ isContextLost: () => lost }),
     render(scene: THREE.Scene, camera: THREE.Camera) {
       renders++; scene.updateMatrixWorld(true); camera.updateMatrixWorld(true);
+      const found = scene.children.filter(child => child instanceof THREE.HemisphereLight
+        || child instanceof THREE.DirectionalLight) as Array<THREE.HemisphereLight | THREE.DirectionalLight>;
+      if (found.length) {
+        lights.push(found.map(light => ({ colour: light.color.getHexString(),
+          ground: light instanceof THREE.HemisphereLight ? light.groundColor.getHexString() : '' })));
+      }
       const visible = scene.children.filter(child => child.visible && child instanceof THREE.Group);
       if (visible.length) { assert.equal(visible.length, 1); roots.push(visible[0]); }
     },
     dispose() { disposals++; }, forceContextLoss() { losses++; },
   } as unknown as THREE.WebGLRenderer;
   const ctx = { save() {}, restore() {}, translate() {}, scale(x: number) { scales.push(x); }, drawImage() {} } as unknown as CanvasRenderingContext2D;
-  return { renderer, ctx, roots, scales, sizes, stats: () => ({ renders, disposals, losses }), lose: () => { lost = true; } };
+  return { renderer, ctx, roots, scales, sizes, lights,
+    stats: () => ({ renders, disposals, losses }), lose: () => { lost = true; } };
 }
 
 test('actual backend serializes lazy requests, isolates a missing GLB and gates Belinda spells', async () => {
@@ -174,6 +184,33 @@ test('actual mixers keep repeated identity skeletons independent and sample comp
   assert.ok([...disposeCounts.values()].every(count => count === 1));
   assert.equal(disposeCounts.size, skeletons.size);
   assert.deepEqual(model.disposals, { geometry: 1, material: 1, texture: 1, skeleton: 1 });
+});
+
+test('the arena theme recolours the hero lights before its asset finishes loading', async () => {
+  const screen = surface();
+  const backend = await loadHeroBackend({ renderer: screen.renderer,
+    loadModel: async () => asset(), loadArena: () => new Promise(() => {}) });
+  const storm = ARENA_DEFINITIONS.find(entry => entry.id === 'storm')!;
+  const temple = ARENA_DEFINITIONS.find(entry => entry.id === 'temple')!;
+  const frame = { width: 480, height: 680, centerX: 240, centerY: 388,
+    radiusX: 317, radiusY: 211, reducedMotion: false, wallClock: 0 };
+  backend.draw(screen.ctx, unit(), actor(), 0, false, 0, 0, 1); await flush();
+  const before = screen.lights.at(-1)!;
+  backend.drawArena!(screen.ctx, storm, frame);
+  backend.draw(screen.ctx, unit(), actor(), 0, false, 0, 0, 1);
+  const stormy = screen.lights.at(-1)!;
+  backend.drawArena!(screen.ctx, temple, frame);
+  backend.draw(screen.ctx, unit(), actor(), 0, false, 0, 0, 1);
+  const warm = screen.lights.at(-1)!;
+  const stormLighting = arenaLighting('storm'), templeLighting = arenaLighting('temple');
+  assert.equal(stormy[0].colour, stormLighting.sky.toString(16).padStart(6, '0'));
+  assert.equal(stormy[0].ground, stormLighting.ground.toString(16).padStart(6, '0'));
+  assert.equal(stormy[1].colour, stormLighting.key.toString(16).padStart(6, '0'));
+  assert.equal(stormy[2].colour, stormLighting.rim.toString(16).padStart(6, '0'));
+  assert.notEqual(warm[1].colour, stormy[1].colour, 'changing arena must change the hero key light');
+  assert.equal(warm[1].colour, templeLighting.key.toString(16).padStart(6, '0'));
+  assert.notDeepEqual(before, stormy);
+  backend.dispose();
 });
 
 test('reset and unmount discard late models, cancel queued requests and never leak loaded resources', async () => {
