@@ -35,7 +35,12 @@ export const ARENA_DEFINITIONS: readonly ArenaDefinition[] = Object.freeze([
 const byId = new Map(ARENA_DEFINITIONS.map(entry => [entry.id, entry]));
 
 /** Resolves the authored scene for a stage theme plus the player's arena override. */
-export function resolveArenaScene(theme: string, palette: 'forest' | 'shadow' | 'temple'): ArenaDefinition | undefined {
+export function resolveArenaScene(theme: string, palette: 'forest' | 'shadow' | 'temple',
+  override?: 'auto' | 'enchanted_forest' | 'celestial_temple' | 'shadow_realm'): ArenaDefinition | undefined {
+  if (override && override !== 'auto') {
+    const id = override === 'enchanted_forest' ? 'forest' : override === 'shadow_realm' ? 'shadow' : 'temple';
+    return byId.get(id);
+  }
   return byId.get(THEME_SCENES[theme] || ARENA_SCENES[palette]);
 }
 

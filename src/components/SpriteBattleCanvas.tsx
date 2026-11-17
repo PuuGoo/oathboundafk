@@ -195,7 +195,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         ctx.lineTo(width / 2 + Math.cos(angle) * width * 0.59, height * 0.57 + Math.sin(angle) * height * 0.27); ctx.stroke();
       }
       // Lớp sân Blender vẽ đè lên ellipse nền; asset tải xong mới hiện, lỗi thì giữ nền phẳng.
-      const scene = resolveArenaScene(theme, arena);
+      const scene = resolveArenaScene(theme, arena, live.current.arenaOverride);
       if (scene) {
         // Vòng sáng sân chỉ chạy trong 1,65 s kể từ lần tung tuyệt kỹ gần nhất.
         const sinceUltimate = lastUltimateAtMs === undefined ? undefined

@@ -34,6 +34,17 @@ test('the arena override wins over the stage theme, like the Canvas palette does
   assert.equal(resolveArenaScene(stage.theme, resolveSpriteArena(stage.theme, 'celestial_temple'))?.id, 'temple');
 });
 
+test('explicit overrides win on every campaign theme including tempest and obsidian', () => {
+  for (const theme of ['sanctuary', 'sylvan', 'catacombs', 'tempest', 'obsidian']) {
+    for (const [override, expected] of [['enchanted_forest', 'forest'], ['celestial_temple', 'temple'], ['shadow_realm', 'shadow']] as const) {
+      assert.equal(resolveArenaScene(theme, resolveSpriteArena(theme, override), override)?.id, expected,
+        `${theme}/${override}`);
+    }
+  }
+  assert.equal(resolveArenaScene('tempest', 'temple', 'auto')?.id, 'storm');
+  assert.equal(resolveArenaScene('obsidian', 'shadow', 'auto')?.id, 'obsidian');
+});
+
 test('unknown themes degrade to the palette scene instead of throwing', () => {
   assert.equal(resolveArenaScene('not_a_theme', 'temple')?.id, 'temple');
   assert.equal(resolveArenaScene('not_a_theme', 'forest')?.id, 'forest');
