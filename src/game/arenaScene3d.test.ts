@@ -10,7 +10,8 @@ import { ARENA_DEFINITIONS, ARENA_CLIP_SECONDS } from './arena3d';
 const surface = () => {
   const stats = { renders: 0, draws: 0, lost: false };
   // Tách hộp bao của đĩa tĩnh và của vòng pulse/mote để test từng phần.
-  const captures: { meshes: number; box: THREE.Box3; motes: THREE.Vector3[]; pulse?: THREE.Box3 }[] = [];
+  const captures: { meshes: number; box: THREE.Box3; floor: THREE.Box3; motes: THREE.Vector3[];
+    pulse?: THREE.Box3 }[] = [];
   const renderer = {
     domElement: {},
     getContext: () => ({ isContextLost: () => stats.lost }),
@@ -19,16 +20,18 @@ const surface = () => {
       scene.updateMatrixWorld(true);
       const box = new THREE.Box3();
       const pulse = new THREE.Box3();
+      const floor = new THREE.Box3();
       const motes: THREE.Vector3[] = [];
       let meshes = 0;
       scene.traverseVisible(object => {
         if (!(object instanceof THREE.Mesh)) return;
         meshes++;
         box.expandByObject(object);
+        if (object.name.includes('arena_floor')) floor.expandByObject(object);
         if (object.name.startsWith('Pulse')) pulse.expandByObject(object);
         if (object.name.startsWith('Mote')) motes.push(object.getWorldPosition(new THREE.Vector3()));
       });
-      captures.push({ meshes, box, motes, pulse: pulse.isEmpty() ? undefined : pulse });
+      captures.push({ meshes, box, floor, motes, pulse: pulse.isEmpty() ? undefined : pulse });
     },
   } as unknown as THREE.WebGLRenderer;
   const ctx = { drawImage: () => { stats.draws++; } } as unknown as CanvasRenderingContext2D;
@@ -78,9 +81,10 @@ test('the arena is drawn on the ellipse the Canvas floor already uses', async ()
   for (const [width, height] of [[480, 680], [960, 1360], [360, 510]] as const) {
     scene.draw(screen.renderer, screen.ctx, definition, frame({ width, height,
       centerX: width / 2, centerY: height * .57, radiusX: width * .66, radiusY: height * .31 }));
-    const box = screen.captures.at(-1)!.box;
-    // Thế giới GLB: đĩa bán kính 100, vành và cột vượt ra ngoài một chút.
-    const widthExtent = box.max.x - box.min.x;
+    // Chỉ đo mesh sàn: hậu cảnh và tháp vượt khung một cách hợp lệ, không phải đĩa.
+    const floorBox = screen.captures.at(-1)!.floor;
+    assert.ok(!floorBox.isEmpty(), 'floor mesh must be present');
+    const widthExtent = floorBox.max.x - floorBox.min.x;
     assert.ok(widthExtent >= 199 && widthExtent <= 260, `disc width ${widthExtent} at ${width}x${height}`);
     // Điểm quan trọng: mép đĩa phải rơi đúng trên ellipse mà Canvas2D đã vẽ.
     const view = { width, height, centerX: width / 2, centerY: height * .57,
@@ -93,6 +97,62 @@ test('the arena is drawn on the ellipse the Canvas floor already uses', async ()
     assert.ok(Math.abs(far.y - (view.centerY - view.radiusY)) < 1.5, `far edge ${far.y}`);
   }
   scene.dispose();
+});
+
+test('every arena has a back wall that lands inside the battle frame', async () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const bytes = readFileSync(new URL(`../../public/assets/arenas/${definition.id}.glb`, import.meta.url));
+    const gltf = await new GLTFLoader().parseAsync(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+    gltf.scene.updateMatrixWorld(true);
+    const point = new THREE.Vector3();
+    let backdrop = 0, top = -Infinity, topX = 0, topZ = 0;
+    gltf.scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const positions = object.geometry.getAttribute('position');
+      for (let index = 0; index < positions.count; index++) {
+        point.fromBufferAttribute(positions, index).applyMatrix4(object.matrixWorld);
+        // Hậu cảnh: hình học phía sau vành sân (z < -105) và cao hơn mặt sàn (y > 12).
+        if (point.z > -105 || point.y < 12) continue;
+        backdrop++;
+        if (point.y > top) { top = point.y; topX = point.x; topZ = point.z; }
+      }
+    });
+    assert.ok(backdrop > 200, `${definition.id}: no backdrop geometry (${backdrop} vertices)`);
+    const scene = createArenaScene(THREE, { loadModel: async () => ({ scene: gltf.scene, animations: gltf.animations }) });
+    const screen = surface();
+    scene.draw(screen.renderer, screen.ctx, definition, frame());
+    await ready(scene, definition.id);
+    scene.draw(screen.renderer, screen.ctx, definition, frame());
+    const projected = scene.project(topX, top, topZ, frame());
+    assert.ok(projected.y > 0, `${definition.id}: backdrop top is cut off above the frame (${projected.y})`);
+    assert.ok(projected.y < 170, `${definition.id}: backdrop does not rise above the arena (${projected.y})`);
+    assert.ok(projected.x > 0 && projected.x < frame().width, `${definition.id}: backdrop off-centre ${projected.x}`);
+    assert.ok(screen.captures.at(-1)!.meshes <= 45, `${definition.id}: backdrop must not add draw calls`);
+    scene.dispose();
+  }
+});
+
+test('braziers, flames, pillars and banners stand on the floor instead of sinking below it', async () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const bytes = readFileSync(new URL(`../../public/assets/arenas/${definition.id}.glb`, import.meta.url));
+    const gltf = await new GLTFLoader().parseAsync(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+    gltf.scene.updateMatrixWorld(true);
+    let props = 0;
+    const sunk: string[] = [];
+    gltf.scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      if (!/^(Brazier|Flame|Pillar|Banner_pole)/.test(object.name)) return;
+      props++;
+      const box = new THREE.Box3().setFromObject(object);
+      // Mặt sàn nằm ở y≈0; props phải ở trên, không được chui xuống dưới.
+      if (box.min.y < 0) sunk.push(`${object.name}@${box.min.y.toFixed(1)}`);
+    });
+    // Cột và cờ bị gộp vào mesh tĩnh, nên chỉ 5 đài lửa + 5 ngọn lửa còn tên riêng.
+    assert.ok(props >= 10, `${definition.id}: expected braziers and flames, got ${props}`);
+    assert.deepEqual(sunk, [], `${definition.id}: props sunk below the floor: ${sunk.join(', ')}`);
+  }
 });
 
 test('switching theme swaps the scene and keeps exactly one active arena', async () => {

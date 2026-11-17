@@ -6,7 +6,11 @@ Lớp thứ ba sau model nhân vật và hiệu ứng kỹ năng: sân đấu đ
 ## Đường ống
 
 - `tools/arena-themes.json`: một scene cho mỗi theme của campaign — `temple` (sanctuary), `forest` (sylvan), `shadow` (catacombs), `storm` (tempest), `obsidian` (obsidian). Gồm bảng màu sàn/viền/đạo cụ/phát sáng và `glow`.
-- `tools/build-arena.py`: dựng sàn nhiều lớp, vành đá, cột + chậu lửa ở nửa xa, cờ, hạt trôi, vòng pulse; gộp mọi mesh tĩnh cùng material rồi xuất GLB.
+- `tools/build-arena.py`: dựng sàn nhiều lớp, vành đá, cột + chậu lửa ở nửa xa, cờ, tường thành xa + hai tháp canh, hạt trôi, vòng pulse; gộp mọi mesh tĩnh cùng material rồi xuất GLB.
+
+**Quy ước trục.** Mọi toạ độ trong `build-arena.py` viết theo hệ tác giả Y-up (`-Z` là hướng camera), rồi đổi sang hệ Blender Z-up qua `to_blender()`. Blender xuất với `export_yup=True` nên `(x, y, z)` thành `(x, z, -y)`; nếu đưa thẳng toạ độ tác giả vào Blender thì đài lửa và cột sẽ nằm ngang dưới sàn. Kích thước dùng `to_blender_extent()` (độ lớn, không đổi dấu).
+
+Hậu cảnh (11 khối tường, đỉnh có lỗ châu mai, cửa sổ phát sáng, hai tháp canh, vòng cổng) dùng lại material sẵn có nên `join_static()` gộp vào 4 mesh tĩnh: **không thêm draw call**. Cao độ chọn theo phép chiếu thật để đỉnh tường nằm trong khung 480×680, không bị cắt mép trên.
 - `assets-source/arenas/<id>/<id>.blend`: source chỉnh sửa được.
 - `public/assets/arenas/<id>.glb`: hai clip `idle` 4 s (loop: lửa nhấp nháy, cờ lay, hạt trôi) và `pulse` 1,65 s (vòng sáng lan khi tung tuyệt kỹ).
 - `public/assets/arenas/<id>.provenance.json`: hash GLB/generator/spec, số object, mesh, vertex, triangle.

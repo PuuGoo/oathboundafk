@@ -77,6 +77,26 @@ def build_materials():
     material('arena_ember', A['accent'], .0, .3, 2.6)
 
 
+def to_blender(loc, rotation=False):
+    """Hệ tác giả (Y-up, -Z là hướng camera) -> hệ Blender (Z-up, +Y là hướng camera).
+
+    Blender xuất glTF với `export_yup=True`, biến (x, y, z) thành (x, z, -y).
+    Mọi toạ độ/góc trong file này viết theo hệ tác giả, nên phải đổi trước khi dựng
+    hình — nếu không đài lửa và cột sẽ nằm ngang dưới sàn thay vì đứng trên sàn.
+    """
+    x, y, z = loc
+    if rotation:
+        # Xoay quanh trục đứng: Blender Z thay cho trục Y của tác giả, cùng dấu.
+        return (x, -z, y)
+    return (x, -z, y)
+
+
+def to_blender_extent(vec):
+    """Kích thước là độ lớn, không phải hướng: chỉ đổi trục, không đổi dấu."""
+    x, y, z = vec
+    return (x, z, y)
+
+
 def finish(obj, name, mat, smooth=True):
     obj.name = name
     obj.data.materials.append(MATERIALS[mat])
@@ -86,45 +106,48 @@ def finish(obj, name, mat, smooth=True):
 
 
 def cyl(name, radius, depth, mat, loc=(0, 0, 0), role=None, **params):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=radius, depth=depth, location=loc)
+    bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=radius, depth=depth, location=to_blender(loc))
     obj = finish(bpy.context.object, name, mat)
     obj.rotation_mode = 'XYZ'
-    register(obj, role, **params)
+    register(obj, role, loc, **params)
     return obj
 
 
 def torus(name, radius, minor, mat, loc=(0, 0, 0), role=None, **params):
     bpy.ops.mesh.primitive_torus_add(major_radius=radius, minor_radius=minor,
-                                     major_segments=64, minor_segments=6, location=loc)
+                                     major_segments=64, minor_segments=6, location=to_blender(loc))
     obj = finish(bpy.context.object, name, mat)
     obj.rotation_mode = 'XYZ'
-    register(obj, role, **params)
+    register(obj, role, loc, **params)
     return obj
 
 
 def box(name, size, mat, loc=(0, 0, 0), rotation=(0, 0, 0), role=None, **params):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=to_blender(loc))
     obj = finish(bpy.context.object, name, mat, smooth=False)
-    obj.scale = size
-    obj.rotation_euler = rotation
+    obj.scale = to_blender_extent(size)
+    obj.rotation_euler = to_blender(loc=rotation, rotation=True)
     bpy.context.view_layer.objects.active = obj
+    # Nướng cả scale lẫn rotation vào mesh: hình khối phải giữ hướng đã tác giả.
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
     obj.rotation_euler = (0, 0, 0)
-    register(obj, role, **params)
+    register(obj, role, loc, **params)
     return obj
 
 
 def ico(name, radius, mat, loc=(0, 0, 0), role=None, subdiv=1, **params):
-    bpy.ops.mesh.primitive_ico_sphere_add(radius=radius, subdivisions=subdiv, location=loc)
+    bpy.ops.mesh.primitive_ico_sphere_add(radius=radius, subdivisions=subdiv, location=to_blender(loc))
     obj = finish(bpy.context.object, name, mat)
     obj.rotation_mode = 'XYZ'
-    register(obj, role, **params)
+    register(obj, role, loc, **params)
     return obj
 
 
-def register(obj, role, **params):
+def register(obj, role, loc, **params):
+    """Ghi lại vị trí theo hệ Y-up của tác giả, không phải hệ Z-up của Blender."""
     obj.rotation_mode = 'XYZ'
-    record = {'obj': obj, 'role': role, 'base': tuple(obj.location), **params}
+    record = {'obj': obj, 'role': role, 'base': tuple(loc), **params}
     (ANIMATED if role else STATIC).append(record)
     return obj
 
@@ -183,6 +206,38 @@ def build_props():
         box(f'Banner cloth {index + 1}', (7, 12, .6), 'arena_trim',
             (x + 3.4, 24, z), (0, 0, 0), role='banner',
             phase=RNG.random() * TAU, sway=.03 + RNG.random() * .03)
+
+
+def build_backdrop():
+    """Tường thành xa và hai tháp canh: tạo chiều sâu phía sau nhân vật.
+
+    Cùng material với sàn/viền/ánh sáng nên `join_static()` gộp luôn vào các mesh
+    tĩnh sẵn có: hậu cảnh không thêm draw call nào.
+    """
+    wall_radius = RADIUS * 1.34
+    for index in range(11):
+        theta = -1.05 + index * .21
+        x, z = wall_radius * math.sin(theta), -wall_radius * math.cos(theta)
+        # Cao độ chọn theo phép chiếu thật: đỉnh tường nằm trong khung, không bị cắt.
+        height = 20 + 12 * max(0.0, math.cos(theta * 1.15))
+        box(f'Back wall {index + 1}', (26, height, 14), 'arena_prop',
+            (x, height / 2 - 4, z), (0, -theta, 0))
+        box(f'Wall cap {index + 1}', (30, 4, 18), 'arena_trim',
+            (x, height - 2, z), (0, -theta, 0))
+        if index % 2 == 0:
+            box(f'Wall window {index + 1}', (9, height * .34, 2.4), 'arena_glow',
+                (x, height * .55, z + 8), (0, -theta, 0))
+        for slot in range(3):
+            box(f'Wall merlon {index + 1}-{slot + 1}', (4, 4, 4), 'arena_trim',
+                (x + (slot - 1) * 8 * math.cos(theta), height + 1, z), (0, -theta, 0))
+    for side in (-1, 1):
+        theta = side * 1.22
+        x, z = wall_radius * 1.02 * math.sin(theta), -wall_radius * 1.02 * math.cos(theta)
+        cyl(f'Back tower {side}', 11, 26, 'arena_trim', (x, 13, z))
+        cyl(f'Tower crown {side}', 13, 5, 'arena_trim', (x, 27, z))
+        ico(f'Tower light {side}', 4, 'arena_glow', (x, 31, z))
+    gate = torus('Back gate', 12, 1.4, 'arena_glow', (0, 12, -wall_radius + 3))
+    gate.rotation_euler = (math.pi / 2, 0, 0)
 
 
 def build_atmosphere():
@@ -248,9 +303,9 @@ def animate():
             for index in range(steps + 1):
                 u = index / steps
                 loc, rot, scale = transform(record, u, clip)
-                obj.location = loc
-                obj.rotation_euler = rot
-                obj.scale = scale
+                obj.location = to_blender(loc)
+                obj.rotation_euler = to_blender(loc=rot, rotation=True)
+                obj.scale = to_blender_extent(scale)
                 frame = round(u * duration * FPS)
                 for path in ('location', 'rotation_euler', 'scale'):
                     obj.keyframe_insert(path, frame=frame)
@@ -261,9 +316,10 @@ def animate():
         for track in obj.animation_data.nla_tracks:
             track.mute = False
         # Đưa về pose idle ở frame 0 để .blend mở ra là thấy sân đúng.
-        obj.location = record['base']
-        obj.rotation_euler = transform(record, 0.0, 'idle')[1]
-        obj.scale = transform(record, 0.0, 'idle')[2]
+        idle_loc, idle_rot, idle_scale = transform(record, 0.0, 'idle')
+        obj.location = to_blender(idle_loc)
+        obj.rotation_euler = to_blender(loc=idle_rot, rotation=True)
+        obj.scale = to_blender_extent(idle_scale)
 
 
 def join_static():
@@ -313,14 +369,14 @@ def studio():
     fill.color = srgb(A['accent'])
     fill_object = bpy.data.objects.new('Fill', fill)
     bpy.context.collection.objects.link(fill_object)
-    fill_object.location = (0, 90, -110)
+    fill_object.location = to_blender((0, 90, -110))
     fill_object.rotation_euler = (math.radians(52), 0, 0)
     data = bpy.data.cameras.new('Preview camera')
     camera = bpy.data.objects.new('Preview camera', data)
     bpy.context.collection.objects.link(camera)
     elevation = math.radians(42)
     distance = 460
-    camera.location = (0, math.sin(elevation) * distance, math.cos(elevation) * distance)
+    camera.location = to_blender((0, math.sin(elevation) * distance, math.cos(elevation) * distance))
     camera.rotation_euler = (math.radians(90) - elevation, 0, 0)
     data.type = 'ORTHO'
     data.ortho_scale = RADIUS * 2.5
@@ -365,6 +421,7 @@ if __name__ == '__main__':
     build_floor()
     build_rim()
     build_props()
+    build_backdrop()
     build_atmosphere()
     join_static()
     animate()
