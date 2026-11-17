@@ -277,6 +277,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const sim = simulation.current, p = live.current;
       if (sim !== active) {
         heroes3d.reset();
+        lastUltimateAtMs = undefined;
         active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }

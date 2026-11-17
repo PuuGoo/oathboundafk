@@ -1,11 +1,28 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, resolveArenaScene, sampleArenaPulse,
 } from './arena3d';
 import { getCampaignStage } from './campaign';
 import { resolveSpriteArena } from './spriteBattleRenderer';
+
+test('battle replacement clears the previous arena ultimate timestamp', () => {
+  const source = readFileSync(new URL('../components/SpriteBattleCanvas.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('if (sim !== active) {');
+  const end = source.indexOf('const playDt', start);
+  assert.ok(start >= 0 && end > start, 'battle reset block exists');
+  const reset = new Function(`
+    const sim = null;
+    let active = {}, lastUltimateAtMs = 8000, accumulator = 0, impactShake = 0, visualClock = 0;
+    const actors = new Map(), texts = [], effects = [], feed = [];
+    const heroes3d = { reset() {} }, publishAnnouncements = () => {};
+    ${source.slice(start, end)}
+    return lastUltimateAtMs;
+  `);
+  assert.equal(reset(), undefined, 'old cast must not replay when the new clock reaches 8000 ms');
+});
 
 test('every stage theme resolves a distinct authored arena', () => {
   const themes = new Set<string>();
