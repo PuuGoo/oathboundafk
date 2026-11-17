@@ -201,7 +201,9 @@ def build_atmosphere():
 def transform(record, u, clip):
     role = record['role']
     phase = record.get('phase', 0.0)
-    t = u
+    # Idle là chuyển động qua lại mềm: cùng pose và vận tốc bằng 0 ở hai đầu.
+    # Tần số riêng của từng vật thể vẫn dùng được mà không nhảy khi loop về 0.
+    t = (1 - math.cos(u * TAU)) * .5 if clip == 'idle' else u
     if role == 'flame':
         flicker = .78 + .22 * math.sin(t * TAU * record.get('rate', 1.0) * 2 + phase)
         if clip == 'pulse':

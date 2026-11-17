@@ -34,8 +34,8 @@
   ],
   "metrics": {
     "glbBytes": 771156,
-    "glbSha256": "4caf075743b5df7c22c5038dd2f819260e140c272c8384a7621bb390d34d4917",
-    "generatorSha256": "9fc693e1fdcf08a168dc1d5c0f9c213278939b325dd6c0d8e206c72ee645dc8c",
+    "glbSha256": "9639f2a6a1442829681ca10684eeaeb6cac1192bbecabad5b02ca20b3c855c57",
+    "generatorSha256": "fbe59b8f9720b2c2f8146b4036c201382c466403b8fd70c60e492c077f479fe5",
     "specSha256": "463ccfaf0e90cf947a65e704cf5ff8b2c5b313402b58f64911999b380402f134",
     "staticObjects": 4,
     "animatedObjects": 35,
