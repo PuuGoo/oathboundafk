@@ -31,7 +31,7 @@ Estrilda có ngựa với xương cổ, đuôi và chân riêng (27 xương tổ
 
 Nhận diện chính gồm khiên Lucius/Hendrik; súng đôi Raine; quan tài/nỏ Fawkes; kiếm Thane; túi hàng, bình thuốc và vịt Rowan; cung Gwyneth; chổi/khay trà Rosaline; song kiếm Cecilia; thùng bia Rigby; bộ vest/dao Oscar; quầng sáng Eluard; đồng hồ cát/bài Eluard thức tỉnh; váy/vương miện Peggy; shotgun Walker; sách/mắt Morrow; trượng tím Scarlet; khăn và kiếm gió Thane thức tỉnh; hoa hồng/kiếm Sonja; mũ, sách và quyền trượng Palmer.
 
-Các clip dài 2 / 0,6 / 0,4 / 1,15 / 1,65 / 0,3 / 1,2 giây theo thứ tự nêu trên. Nhóm đầu có cast timeline từ simulation; các tướng chưa có timeline riêng dùng thời lượng trình diễn action hiện có. Animation chỉ trình diễn, không áp damage/cooldown/energy hoặc điều khiển simulation. Hiệu ứng kỹ năng 3D nằm ở pipeline riêng `docs/hero-vfx-3d.md`; hiện chỉ Belinda có GLB hiệu ứng, các tướng còn lại vẫn dùng Canvas2D.
+Các clip dài 2 / 0,6 / 0,4 / 1,15 / 1,65 / 0,3 / 1,2 giây theo thứ tự nêu trên. Nhóm đầu có cast timeline từ simulation; các tướng chưa có timeline riêng dùng thời lượng trình diễn action hiện có. Animation chỉ trình diễn, không áp damage/cooldown/energy hoặc điều khiển simulation. Hiệu ứng kỹ năng 3D nằm ở pipeline riêng `docs/hero-vfx-3d.md`; cả 22 danh tính đã có GLB hiệu ứng, mỗi tướng một file.
 
 Khớp rigid, áo và trang bị có thể giao nhau ở pose cực đoan. Các animation tái sử dụng ngôn ngữ chuyển động theo loại vũ khí, không khẳng định mỗi kỹ năng là một motion-capture riêng. Trong đoạn đầu animation gục, chân có thể thấp hơn mặt sàn khoảng 0,08 đơn vị model, tương tự Belinda hiện có.
 
