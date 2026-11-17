@@ -16,7 +16,7 @@ export const VFX_CLIP_SECONDS: Readonly<Record<VfxClip, number>> = Object.freeze
 });
 
 export const VFX_STYLE = Object.freeze({
-  radius: 34, arcHeight: 22, chargeFloor: .24, impactSeconds: .45, maxPerLayer: 8,
+  radius: 34, arcHeight: 22, chargeFloor: .24, flightOpacity: .9, impactSeconds: .45, maxPerLayer: 8,
 });
 
 export interface HeroVfxDefinition {
@@ -77,6 +77,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function smoothProgress(value: number): number {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 function clipForEffect(effect: SpriteEffect): VfxClip | undefined {
   if (OUTCOME_KINDS.has(effect.kind)) return 'impact';
   if (effect.kind !== 'cast') return undefined;
@@ -113,8 +118,11 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
     sourceInstanceId: effect.sourceId, support: effect.support, clip, slot, phase,
     age: effect.age, progress, travel,
     opacity: impact ? (1 - progress) * .95
-      : phase === 'recovery' ? Math.max(0, (1 - progress) * .7)
-        : phase === 'charge' ? VFX_STYLE.chargeFloor + progress * .6 : .9,
+      : phase === 'recovery' ? VFX_STYLE.flightOpacity * (1 - smoothProgress(
+        (effect.age - contact) / Math.max(.001, effect.duration - contact)))
+        : phase === 'charge' ? VFX_STYLE.chargeFloor
+          + (VFX_STYLE.flightOpacity - VFX_STYLE.chargeFloor) * smoothProgress(effect.age / Math.max(.001, release))
+          : VFX_STYLE.flightOpacity,
     spin: reducedMotion ? 0 : effect.age * 2.6,
     grounded: impact || phase === 'charge',
     source: { x: effect.source.x, y: effect.source.y },

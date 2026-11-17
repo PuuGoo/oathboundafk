@@ -110,6 +110,23 @@ test('a cast without an authored timeline still resolves proportional phases and
   }
 });
 
+test('cast opacity stays continuous at release and contact for every slot', () => {
+  for (const slot of ['basic', 'active', 'ultimate'] as const) {
+    for (const timeline of [getCombatTimeline('belinda', slot), undefined]) {
+      const effect = { ...cast(slot), timeline };
+      const release = timeline ? timeline.releaseMs / 1000 : effect.duration * .24;
+      const contact = timeline ? timeline.hits[0].atMs / 1000 : effect.duration * .52;
+      for (const time of [release, contact]) {
+        const left = sample({ ...effect, age: time - .00001 })!;
+        const right = sample({ ...effect, age: time + .00001 })!;
+        assert.ok(Math.abs(left.opacity - right.opacity) < .001, `${slot} opacity jumped at ${time}`);
+        assert.notEqual(right.clip, 'impact', 'brightness never creates a synthetic hit');
+      }
+      assert.ok(sample({ ...effect, age: effect.duration - .00001 })!.opacity < .001);
+    }
+  }
+});
+
 test('reduced motion freezes spin without touching clip, progress or magnitude', () => {
   const effect = cast('ultimate', .5);
   const moving = sample(effect, false)!, still = sample(effect, true)!;
