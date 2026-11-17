@@ -7,9 +7,10 @@ import { getCombatTimeline } from './skillTimelines';
 import type { BattleUnitRuntime, CombatEvent } from './types';
 import type { SpriteEffect } from './spriteBattleEffects';
 import {
-  getHeroVfx, HERO_VFX_DEFINITIONS, sampleHeroVfx, sampleVfxBatch, vfxEffectsForFallback,
+  getHeroVfx, heroVfxTint, HERO_VFX_DEFINITIONS, sampleHeroVfx, sampleVfxBatch, vfxEffectsForFallback,
   VFX_CLIP_SECONDS, VFX_STYLE, vfxLightEnergy,
 } from './heroVfx';
+import authoredEffects from '../../tools/hero-vfx.json';
 
 const source = { instanceId: 'mage', heroId: 'belinda', team: 'ally', x: 250, y: 230 } as BattleUnitRuntime;
 const target = { instanceId: 'locked', heroId: 'lucius', team: 'enemy', x: 650, y: 260 } as BattleUnitRuntime;
@@ -231,4 +232,15 @@ test('fallback keeps every effect the 3D pass did not handle, in order', () => {
   const remaining = vfxEffectsForFallback(effects, new Set([effects[1].id]));
   assert.deepEqual(remaining.map(effect => effect.id), [effects[0].id, effects[2].id]);
   assert.equal(vfxEffectsForFallback(effects, new Set([1, 5, 2])).length, 0);
+});
+
+test('the arena pulse can borrow each hero primary colour from the same manifest', () => {
+  for (const entry of HERO_VFX_DEFINITIONS) {
+    const spec = authoredEffects.find(candidate => candidate.heroId === entry.heroId)!;
+    const expected = Number.parseInt(spec.primary, 16);
+    assert.equal(heroVfxTint(entry.heroId), expected, `${entry.heroId}: pulse tint must be the authored primary`);
+    assert.ok(expected >= 0 && expected <= 0xffffff, `${entry.heroId}: tint must stay a 24-bit colour`);
+  }
+  assert.equal(heroVfxTint('not_a_hero'), undefined, 'heroes without an effect keep the arena palette');
+  assert.equal(heroVfxTint(''), undefined);
 });

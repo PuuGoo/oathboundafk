@@ -19,6 +19,8 @@ export interface ArenaFrame {
   reducedMotion: boolean;
   /** Seconds since the current ultimate cast started, when one is running. */
   pulseAge?: number;
+  /** Màu nhận diện của tướng vừa tung tuyệt kỹ; vòng sáng sàn lấy màu này. */
+  pulseTint?: number;
   wallClock: number;
 }
 export interface LoadedArena { scene: Three.Object3D; animations: Three.AnimationClip[] }
@@ -39,7 +41,12 @@ type Active = {
   actions: Map<string, Three.AnimationAction>;
   /** Objects that belong to the one-shot pulse clip and must not linger afterwards. */
   pulseObjects: Three.Object3D[];
+  /** Vòng sáng pulse + màu gốc của nó, để tô màu chiêu rồi trả lại bảng màu theme. */
+  pulseTintable: Array<{ material: Three.MeshStandardMaterial; color: Three.Color; emissive: Three.Color }>;
 };
+
+/** Mức pha với màu chiêu: đủ để đọc ra tướng nào vừa tung, chưa tới mức mất bảng màu sân. */
+const PULSE_TINT_MIX = .62;
 
 /**
  * Elevation chosen from the target ellipse instead of a fixed angle: the studio
@@ -98,6 +105,8 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
   const records = new Map<ArenaSceneId, Record_>(ARENA_DEFINITIONS.map(definition => [definition.id, {
     definition, state: 'idle', version: 0,
   }]));
+  /** Màu tạm, tái dùng mỗi frame thay vì cấp phát `Color` mới trong vòng vẽ. */
+  const pulseTintColor = new THREE.Color();
   const queue: Record_[] = [];
   let loading = false;
   let active: Active | undefined;
@@ -162,6 +171,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
     fog.far = depth.far;
     const root = record.template.clone(true);
     root.visible = true;
+    const pulseTintable: Active['pulseTintable'] = [];
     // Alpha nhẹ để lớp sàn 3D hoà vào bầu trời Canvas2D phía sau thay vì cắt cứng.
     root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
@@ -179,6 +189,13 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         return copy;
       });
       object.material = Array.isArray(object.material) ? cloned : cloned[0];
+      // Vòng pulse giữ màu gốc của theme để mỗi lần tung chiêu có thể tô lại rồi trả về.
+      if (!object.name.startsWith('Pulse')) return;
+      for (const material of cloned) {
+        if (material instanceof THREE.MeshStandardMaterial) {
+          pulseTintable.push({ material, color: material.color.clone(), emissive: material.emissive.clone() });
+        }
+      }
     });
     scene.add(root);
     const mixer = new THREE.AnimationMixer(root);
@@ -194,7 +211,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       action.play();
       actions.set(name, action);
     }
-    active = { id, root, mixer, actions, pulseObjects };
+    active = { id, root, mixer, actions, pulseObjects, pulseTintable };
     return active;
   };
 
@@ -234,6 +251,17 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
           const materials = Array.isArray(object.material) ? object.material : [object.material];
           for (const material of materials) material.opacity = pulseVisible ? arenaPulseOpacity(sample.progress) : 0;
         }
+      }
+      // Vòng sáng dưới sàn mang màu của tướng vừa tung tuyệt kỹ, rồi trả lại bảng màu theme.
+      const tint = pulseVisible && frame.pulseTint !== undefined && Number.isFinite(frame.pulseTint)
+        ? frame.pulseTint : undefined;
+      if (tint !== undefined) pulseTintColor.setHex(tint >>> 0);
+      for (const entry of current.pulseTintable) {
+        entry.material.color.copy(entry.color);
+        entry.material.emissive.copy(entry.emissive);
+        if (tint === undefined) continue;
+        entry.material.color.lerp(pulseTintColor, PULSE_TINT_MIX);
+        entry.material.emissive.lerp(pulseTintColor, PULSE_TINT_MIX);
       }
       // Một world-unit trên mỗi pixel: đĩa bán kính 100 phủ đúng radiusX pixel.
       // Góc nghiêng lấy từ ellipse của frame, nên đĩa luôn khớp cả hai trục.

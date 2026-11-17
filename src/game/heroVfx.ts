@@ -59,6 +59,17 @@ export function getHeroVfx(heroId: string): HeroVfxDefinition | undefined {
   return byHeroId.get(heroId);
 }
 
+/**
+ * Màu nhận diện của hiệu ứng (`primary` trong manifest), dùng cho sân khi tuyệt kỹ
+ * vừa tung: vòng sáng dưới sàn đổi theo màu chiêu thay vì chỉ theo theme.
+ * Trả `undefined` cho tướng không có GLB hiệu ứng.
+ */
+export function heroVfxTint(heroId: string): number | undefined {
+  const spec = authoredByHero.get(heroId);
+  if (!spec || typeof spec.primary !== 'string' || !/^[0-9a-f]{6}$/i.test(spec.primary)) return undefined;
+  return Number.parseInt(spec.primary, 16) & 0xffffff;
+}
+
 /** Damage alone owns this burst; heal/shield/control keep their semantic Canvas art. */
 const OUTCOME_KINDS = new Set<SpriteEffect['kind']>(['impact']);
 

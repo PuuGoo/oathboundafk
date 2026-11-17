@@ -177,6 +177,61 @@ test('light rings float above the stone floor instead of being buried in it', as
   }
 });
 
+test('the pulse ring borrows the casting hero colour, then hands the palette back', async () => {
+  const definition = at('temple');
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  let pulse: THREE.MeshStandardMaterial[] = [];
+  let runes: THREE.MeshStandardMaterial[] = [];
+  screen.renderer.render = (root: THREE.Scene) => {
+    pulse = []; runes = [];
+    // Traverse cả object đang ẩn: vòng pulse bị ẩn ngoài clip nhưng material vẫn là thứ được tô màu.
+    root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = (Array.isArray(object.material) ? object.material : [object.material])
+        .filter((material): material is THREE.MeshStandardMaterial => material instanceof THREE.MeshStandardMaterial);
+      for (const material of materials) {
+        if (object.name.startsWith('Pulse')) pulse.push(material);
+        // Rune, đài lửa và hạt sáng cùng material `arena_glow` nhưng không phải vòng pulse.
+        else if (material.name === 'arena_glow') runes.push(material);
+      }
+    });
+  };
+  try {
+    scene.draw(screen.renderer, screen.ctx, definition, frame());
+    await ready(scene, 'temple');
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition, frame()), true);
+    assert.equal(pulse.length, 1, 'the pulse ring is one authored mesh');
+    assert.ok(runes.length > 0, 'the arena keeps its other emissive meshes');
+    const base = pulse[0].color.clone();
+    const baseEmissive = pulse[0].emissive.clone();
+    const runeBase = runes.map(material => material.color.clone());
+
+    // Tuyệt kỹ của tướng lửa: vòng sáng sàn phải rời bảng màu accent của theme.
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition,
+      frame({ pulseAge: .35, pulseTint: 0xff3322 })), true);
+    const tint = new THREE.Color(0xff3322);
+    const expected = base.clone().lerp(tint, .62);
+    const lit = pulse[0].color;
+    assert.ok(Math.abs(lit.r - expected.r) < 1e-6 && Math.abs(lit.g - expected.g) < 1e-6
+      && Math.abs(lit.b - expected.b) < 1e-6, `pulse ring colour ${lit.getHexString()} must be the hero tint`);
+    const shift = Math.max(Math.abs(base.r - lit.r), Math.abs(base.g - lit.g), Math.abs(base.b - lit.b));
+    assert.ok(shift > .15, `the tint has to be visible, not a rounding nudge (${shift})`);
+    assert.ok(Math.abs(pulse[0].emissive.r - expected.r) < 1e-6, 'emission follows the same tint');
+    runes.forEach((material, index) => assert.ok(material.color.equals(runeBase[index]),
+      'runes, braziers and motes keep their palette while the pulse is tinted'));
+
+    // Pulse kết thúc: trả lại đúng màu accent đã tác giả, không để màu chiêu dính lại.
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 2.2 })), true);
+    assert.ok(pulse[0].color.equals(base), 'pulse ring must restore the theme accent');
+    assert.ok(pulse[0].emissive.equals(baseEmissive), 'emission must restore the theme accent');
+
+    // Không có tint (tướng chưa có GLB hiệu ứng) thì vòng sáng giữ nguyên bảng màu.
+    assert.equal(scene.draw(screen.renderer, screen.ctx, definition, frame({ pulseAge: .3 })), true);
+    assert.ok(pulse[0].color.equals(base), 'a cast without a hero colour keeps the theme');
+  } finally { scene.dispose(); }
+});
+
 test('arena fog adds depth to real backdrop vertices while leaving the front clear', async () => {
   for (const definition of ARENA_DEFINITIONS) {
     const screen = surface();
