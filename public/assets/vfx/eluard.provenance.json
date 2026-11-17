@@ -1,0 +1,56 @@
+{
+  "id": "eluard",
+  "heroId": "eluard",
+  "name": "Eluard",
+  "family": "bloom",
+  "source": "assets-source/vfx/eluard/eluard.blend",
+  "asset": "eluard.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "H\u00e0o quang v\u00e0ng ng\u00e0, c\u1ed9t s\u00e1ng xanh v\u00e0 h\u1ea1t th\u00e1nh quanh qu\u1ea3 c\u1ea7u c\u1ee7a Eluard.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 78
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 78
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 78
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 78
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 358068,
+    "glbSha256": "a6e2251103bb1211a4d22cc9ebbc6ccca0a390fd37f85bcc4164318983741520",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "5e0486aa4c1b293a394c47cf4f6dc6ce81d454fd56075d71e50f8073a4f22d39",
+    "objects": 27,
+    "vertices": 616,
+    "triangles": 1124,
+    "meshes": 27,
+    "materials": 3
+  }
+}
