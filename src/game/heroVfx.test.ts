@@ -8,7 +8,7 @@ import type { BattleUnitRuntime, CombatEvent } from './types';
 import type { SpriteEffect } from './spriteBattleEffects';
 import {
   getHeroVfx, HERO_VFX_DEFINITIONS, sampleHeroVfx, sampleVfxBatch, vfxEffectsForFallback,
-  VFX_CLIP_SECONDS, VFX_STYLE,
+  VFX_CLIP_SECONDS, VFX_STYLE, vfxLightEnergy,
 } from './heroVfx';
 
 const source = { instanceId: 'mage', heroId: 'belinda', team: 'ally', x: 250, y: 230 } as BattleUnitRuntime;
@@ -23,6 +23,9 @@ const outcome = (age = 0, id = 9) => ({
   ...createSpriteEffect(event('active', { id, type: 'damage', value: 12, skillSlot: 'active' }), source, target)!, age,
 });
 const sample = (effect: SpriteEffect, reducedMotion = false) => sampleHeroVfx(effect, 480, 680, reducedMotion);
+/** Thấp nhất trong batch là mức giảm chung; 1 nghĩa là không phải giảm. */
+const dimmestLayer = (batch: readonly { brightness: number }[]) =>
+  Math.min(1, ...batch.map(entry => entry.brightness));
 /** Any roster hero without a committed effect; tests must survive heroes being enabled later. */
 const disabledHero = OATHBOUND_HEROES.find(hero => !getHeroVfx(hero.heroId));
 
@@ -39,6 +42,20 @@ test('only roster heroes with a committed Blender effect resolve, by stable hero
   }
   assert.equal(new Set(HERO_VFX_DEFINITIONS.map(entry => entry.url)).size, HERO_VFX_DEFINITIONS.length,
     'each hero needs its own effect file');
+});
+
+test('a busy layer dims every cast instead of letting additive light blow out', () => {
+  const quiet = sampleVfxBatch([cast('active', .5)], 480, 680, false);
+  assert.equal(dimmestLayer(quiet), 1, 'one cast keeps full authored brightness');
+  const busy = sampleVfxBatch(
+    [1, 2, 3, 4, 5, 6].map(id => ({ ...cast('ultimate', .5), id })), 480, 680, false);
+  assert.equal(busy.length, 6);
+  assert.ok(dimmestLayer(busy) < .75, 'six simultaneous ultimates must be scaled back');
+  for (const total of [quiet, busy]) {
+    assert.ok(total.reduce((sum, entry) => sum + vfxLightEnergy(entry), 0) <= VFX_STYLE.brightnessBudget + 1e-9,
+      'the layer never exceeds its light budget');
+  }
+  for (const entry of busy) assert.ok(entry.brightness > 0, 'a dimmed cast still draws');
 });
 
 test('damage bursts expand outward as they fade while cast scale stays fixed', () => {

@@ -105,6 +105,30 @@ test('spell light layers blend additively and keep their authored hue', async ()
   scene.dispose();
 });
 
+test('a crowded additive layer reaches the screen dimmer than a lone cast', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const peak = () => {
+    let best = 0;
+    for (const mesh of screen.captures.at(-1)!.meshes) {
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        best = Math.max(best, material.opacity);
+      }
+    }
+    return best;
+  };
+  scene.draw(screen.renderer, screen.ctx, [cast('ultimate', .6, 1)], 'front', frame);
+  await settle(scene);
+  scene.draw(screen.renderer, screen.ctx, [cast('ultimate', .6, 1)], 'front', frame);
+  const alone = peak();
+  const crowd = [2, 3, 4, 5, 6, 7].map(id => cast('ultimate', .6, id));
+  scene.draw(screen.renderer, screen.ctx, crowd, 'front', frame);
+  const stacked = peak();
+  assert.ok(alone > 0);
+  assert.ok(stacked < alone * .6, `six additive ultimates must dim (${stacked} vs ${alone})`);
+  assert.ok(stacked > 0, 'a dimmed layer still renders');
+  scene.dispose();
+});
+
 test('projectile remains at contact instead of snapping back during recovery', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   scene.draw(screen.renderer, screen.ctx, [cast('active', .599)], 'front', frame);

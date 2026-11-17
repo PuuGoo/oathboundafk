@@ -207,7 +207,7 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     instance.root.scale.set(radius * facing, radius * flatten, radius);
     instance.root.visible = true;
     for (const entry of instance.materials) {
-      entry.material.opacity = Math.max(0, Math.min(1, sample.opacity * entry.factor));
+      entry.material.opacity = Math.max(0, Math.min(1, sample.opacity * sample.brightness * entry.factor));
       if (frame.low && entry.halo) entry.material.opacity *= .5;
     }
   };

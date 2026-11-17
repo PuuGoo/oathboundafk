@@ -17,6 +17,8 @@ export const VFX_CLIP_SECONDS: Readonly<Record<VfxClip, number>> = Object.freeze
 
 export const VFX_STYLE = Object.freeze({
   radius: 34, arcHeight: 22, chargeFloor: .24, flightOpacity: .9, impactSeconds: .45, maxPerLayer: 8,
+  /** Tổng độ sáng cộng dồn cho một lớp; vượt ngưỡng thì giảm đều thay vì cháy trắng. */
+  brightnessBudget: 3.6,
 });
 
 export interface HeroVfxDefinition {
@@ -68,6 +70,8 @@ export interface HeroVfxSample {
   /** 0..1 of the cast's release → contact window; 1 once contact has happened. */
   travel: number;
   opacity: number;
+  /** Per-sample dimmer set by the batch; 1 while the layer fits its light budget. */
+  brightness: number;
   spin: number;
   grounded: boolean;
   source: Point;
@@ -128,6 +132,7 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
         : phase === 'charge' ? VFX_STYLE.chargeFloor
           + (VFX_STYLE.flightOpacity - VFX_STYLE.chargeFloor) * smoothProgress(effect.age / Math.max(.001, release))
           : VFX_STYLE.flightOpacity,
+    brightness: 1,
     spin: reducedMotion ? 0 : effect.age * 2.6,
     grounded: impact || phase === 'charge',
     source: { x: effect.source.x, y: effect.source.y },
@@ -138,6 +143,11 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
 
 function priority(sample: HeroVfxSample): number {
   return (sample.slot === 'ultimate' ? 30 : sample.slot === 'active' ? 20 : 10) + (sample.phase === 'impact' ? 5 : 0);
+}
+
+/** Additive light adds up by covered area, so area (magnitude²) weights the cost. */
+export function vfxLightEnergy(sample: HeroVfxSample): number {
+  return sample.opacity * sample.magnitude * sample.magnitude * sample.brightness;
 }
 
 /**
@@ -153,7 +163,11 @@ export function sampleVfxBatch(effects: readonly SpriteEffect[], width: number, 
     if (sample) samples.push(sample);
   }
   samples.sort((a, b) => priority(b) - priority(a) || b.id - a.id);
-  return samples.slice(0, Math.max(0, limit));
+  const kept = samples.slice(0, Math.max(0, limit));
+  // Additive layers stack; past the budget every sample dims evenly instead of blowing out to white.
+  const energy = kept.reduce((sum, entry) => sum + vfxLightEnergy(entry), 0);
+  const scale = energy > VFX_STYLE.brightnessBudget ? VFX_STYLE.brightnessBudget / energy : 1;
+  return scale < 1 ? kept.map(entry => ({ ...entry, brightness: scale })) : kept;
 }
 
 /** A handled id must be identical in every layer pass before Canvas2D yields it. */
