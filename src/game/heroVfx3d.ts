@@ -197,7 +197,8 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     else center = muzzle;
     const radius = VFX_STYLE.radius * scale * sample.magnitude;
     instance.root.position.set(center.x - frame.width / 2, frame.height / 2 - center.y, layer === 'ground' ? -12 : 0);
-    instance.root.scale.set(radius, radius * flatten, radius);
+    const facing = layer === 'front' && sample.directional && !sample.support && !impact ? toward : 1;
+    instance.root.scale.set(radius * facing, radius * flatten, radius);
     instance.root.visible = true;
     for (const entry of instance.materials) {
       entry.material.opacity = Math.max(0, Math.min(1, sample.opacity * entry.factor));

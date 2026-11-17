@@ -58,6 +58,30 @@ const surface = () => {
   return { renderer, ctx, stats, captures };
 };
 
+test('Raine gunfire mirrors toward the enemy without mirroring ground rings', async () => {
+  const screen = surface();
+  const scene = createHeroVfxScene(THREE, { loadModel: async () => {
+    const bytes = readFileSync(new URL('../../public/assets/vfx/raine.glb', import.meta.url));
+    return new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  } });
+  const effect = { ...cast('active', .4), sourceHeroId: 'raine' };
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+  await settle(scene, 'ranger');
+  const rootScale = () => {
+    let root: THREE.Object3D = screen.captures.at(-1)!.meshes[0];
+    while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+    return root.scale.x;
+  };
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+  const right = rootScale();
+  const reversed = { ...effect, source: effect.target, target: effect.source };
+  scene.draw(screen.renderer, screen.ctx, [reversed], 'front', frame);
+  assert.equal(rootScale(), -right, 'enemy shots must mirror their authored local X direction');
+  scene.draw(screen.renderer, screen.ctx, [reversed], 'ground', frame);
+  assert.equal(rootScale(), right, 'floor geometry retains its orientation');
+  scene.dispose();
+});
+
 test('projectile remains at contact instead of snapping back during recovery', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   scene.draw(screen.renderer, screen.ctx, [cast('active', .599)], 'front', frame);

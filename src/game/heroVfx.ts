@@ -23,6 +23,7 @@ export interface HeroVfxDefinition {
   readonly heroId: string;
   readonly sourceId: string;
   readonly url: string;
+  readonly directional: boolean;
 }
 
 /** Cùng manifest cho Blender và runtime; prebuild kiểm tra asset/source thật. */
@@ -33,6 +34,7 @@ export const HERO_VFX_DEFINITIONS: readonly HeroVfxDefinition[] = Object.freeze(
     heroId: hero.heroId,
     sourceId: hero.sourceId,
     url: `/assets/vfx/${authoredByHero.get(hero.heroId)!.id}.glb`,
+    directional: ['gunfire', 'volley', 'strike', 'lance'].includes(authoredByHero.get(hero.heroId)!.family),
   })),
 );
 
@@ -55,6 +57,7 @@ export interface HeroVfxSample {
   sourceId: string;
   sourceInstanceId?: string;
   support: boolean;
+  directional: boolean;
   clip: VfxClip;
   slot: 'basic' | 'active' | 'ultimate';
   phase: VfxPhase;
@@ -115,7 +118,7 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
     : slot === 'ultimate' ? 1.55 : slot === 'active' ? 1.1 : .5;
   return {
     id: effect.id, heroId: effect.sourceHeroId, sourceId: definition.sourceId,
-    sourceInstanceId: effect.sourceId, support: effect.support, clip, slot, phase,
+    sourceInstanceId: effect.sourceId, support: effect.support, directional: definition.directional, clip, slot, phase,
     age: effect.age, progress, travel,
     opacity: impact ? (1 - progress) * .95
       : phase === 'recovery' ? VFX_STYLE.flightOpacity * (1 - smoothProgress(
