@@ -1,0 +1,56 @@
+{
+  "id": "scarlet",
+  "heroId": "scarlet",
+  "name": "Scarlet",
+  "family": "storm",
+  "source": "assets-source/vfx/scarlet/scarlet.blend",
+  "asset": "scarlet.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Tia ch\u1edbp \u0111\u1ecf th\u1eabm, gai pha l\u00ea t\u00edm v\u00e0 v\u00e0nh xung k\u00edch quanh tr\u01b0\u1ee3ng h\u1eafc \u00e1m c\u1ee7a Scarlet.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 107
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 107
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 107
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 107
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 512828,
+    "glbSha256": "11fe6ee67c605894a8ad4801d85088c824b32256b11099775d17b4b41d54cbeb",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "34590cfed532e27fc22c5f5cc9a21db9fa7e3ede1928bdc8a150853a10ba6945",
+    "objects": 37,
+    "vertices": 1374,
+    "triangles": 2608,
+    "meshes": 37,
+    "materials": 3
+  }
+}

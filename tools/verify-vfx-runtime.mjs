@@ -107,6 +107,25 @@ try {
   await call('Page.navigate', { url: origin + '/?autostart=1' });
   await wait("!!document.querySelector('[aria-label=\"Tạm dừng\"]')");
   await wait(`(${heroState}).units?.length>0`);
+  // Pause/×2 kiểm ngay sau khi trận mở: stage 1 có thể kết thúc trước cửa sổ quan sát.
+  await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
+  await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
+  await wait(`!!document.querySelector('[data-testid=pause-modal]')&&(${heroState}).paused===true`);
+  await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='hidden'");
+  const clip = await evaluate(`(()=>{const box=${canvas}.getBoundingClientRect();return {x:box.x,y:box.y,width:box.width,height:box.height,scale:1}})()`);
+  const firstPixels = (await call('Page.captureScreenshot', { format: 'png', clip })).data;
+  const firstState = JSON.stringify(await evaluate(vfxState));
+  await sleep(500);
+  result.pauseStable = firstPixels === (await call('Page.captureScreenshot', { format: 'png', clip })).data
+    && firstState === JSON.stringify(await evaluate(vfxState));
+  assert.equal(result.pauseStable, true, 'Paused effect pixels or ages changed');
+  await shot('paused');
+  await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='visible'");
+  await click("document.querySelector('[data-testid=resume-battle-btn]')");
+  await wait(`(${heroState}).paused===false`);
+  await click("document.querySelector('[data-testid=toggle-speed-btn]')");
+  await wait(`(${heroState}).speed===2`);
+  result.speed2 = (await evaluate(heroState)).speed;
   // Gom bằng chứng: effect nào do GLB vẽ, ở slot nào, trong suốt cửa sổ quan sát.
   const until = Date.now() + seconds * 1000;
   let passes = 0;
@@ -149,36 +168,17 @@ try {
     assert.ok(drawnKeys.some(key => key.startsWith(heroId + ':')), `${heroId}: no Blender-drawn effect observed`);
   }
   result.activeObserved = drawnKeys.some(key => key.includes(':cast:active'));
-  // Pause phải giữ nguyên pixel canvas và tuổi effect.
-  await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
-  await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
-  await wait(`!!document.querySelector('[data-testid=pause-modal]')&&(${heroState}).paused===true`);
-  await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='hidden'");
-  const clip = await evaluate(`(()=>{const box=${canvas}.getBoundingClientRect();return {x:box.x,y:box.y,width:box.width,height:box.height,scale:1}})()`);
-  const firstPixels = (await call('Page.captureScreenshot', { format: 'png', clip })).data;
-  const firstState = JSON.stringify(await evaluate(vfxState));
-  await sleep(500);
-  result.pauseStable = firstPixels === (await call('Page.captureScreenshot', { format: 'png', clip })).data
-    && firstState === JSON.stringify(await evaluate(vfxState));
-  assert.equal(result.pauseStable, true, 'Paused effect pixels or ages changed');
-  await shot('paused');
-  await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='visible'");
-  await click("document.querySelector('[data-testid=resume-battle-btn]')");
-  await wait(`(${heroState}).paused===false`);
-  await click("document.querySelector('[data-testid=toggle-speed-btn]')");
-  await wait(`(${heroState}).speed===2`);
-  result.speed2 = (await evaluate(heroState)).speed;
-  const before = Object.values(result.seen).reduce((total, count) => total + count, 0);
-  await sleep(1500);
-  const after = (await evaluate(vfxState)).effects?.filter(effect => effect.rendered3d).length || 0;
-  result.speed2Frames = { beforePasses: passes, drawnAfter: after };
+  // Đo lại sau cửa sổ ×2: hiệu ứng phải tiếp tục được vẽ ở tốc độ gấp đôi.
+  await sleep(1200);
+  result.x2DrawnAtEnd = (await evaluate(vfxState)).effects?.filter(effect => effect.rendered3d).length || 0;
   assert.deepEqual(result.errors, []);
   result.uniqueEffects = Object.fromEntries([...uniqueEffects].map(([key, ids]) => [key, ids.size]));
   result.countMeaning = 'seen/all are sampled frames; uniqueEffects deduplicates real effect IDs';
   fs.writeFileSync(path.join(output, `${prefix}-browser.json`), JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify({ group, uniqueEffects: result.uniqueEffects,
     errors: result.errors.length, failedAssets: result.failedAssets,
-    pauseStable: result.pauseStable, speed2: result.speed2, before }));
+    pauseStable: result.pauseStable, speed2: result.speed2, x2DrawnAtEnd: result.x2DrawnAtEnd,
+    passes }));
 } catch (error) {
   fs.writeFileSync(path.join(output, `${prefix}-failure.json`), JSON.stringify({ ...result, failure: String(error) }, null, 2) + '\n');
   throw error;
