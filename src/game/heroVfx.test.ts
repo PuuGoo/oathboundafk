@@ -58,6 +58,30 @@ test('a busy layer dims every cast instead of letting additive light blow out', 
   for (const entry of busy) assert.ok(entry.brightness > 0, 'a dimmed cast still draws');
 });
 
+test('travel follows the effect family: auras stay home, swords land, shots fly', () => {
+  // Hào quang (sigil/bloom/storm) nở quanh người niệm, không bắn sang địch.
+  for (const heroId of ['belinda', 'celestial_guardian', 'fawkes']) {
+    const effect = { ...cast('active', .6), sourceHeroId: heroId };
+    const value = sample(effect)!;
+    assert.equal(value.travelMode, 'aura', `${heroId} must bloom in place`);
+    assert.equal(value.travel, 0);
+  }
+  // Nhát chém/đòn cận chiến xảy ra tại mục tiêu ngay từ đầu.
+  const melee = sample({ ...cast('active', .6), sourceHeroId: 'astral_blademaster' })!;
+  assert.equal(melee.travelMode, 'melee');
+  assert.equal(melee.travel, 1);
+  // Đạn/thương/tên bay dần từ nòng tới mục tiêu.
+  const travels = Array.from({ length: 40 }, (_, index) => sample({
+    ...cast('active', index * .03), sourceHeroId: 'raine',
+  })!).filter(Boolean);
+  assert.equal(travels[0].travelMode, 'projectile');
+  const seen = travels.map(entry => entry.travel);
+  assert.ok(Math.min(...seen) === 0 && Math.max(...seen) === 1, 'a shot starts at the muzzle and reaches the target');
+  assert.ok(seen.some(value => value > .1 && value < .9), 'a shot spends real time in flight');
+  assert.equal(sample({ ...cast('active', .6), sourceHeroId: 'estrida' })?.travelMode, undefined,
+    'unknown heroes resolve nothing');
+});
+
 test('damage bursts expand outward as they fade while cast scale stays fixed', () => {
   const base = { ...outcome(), duration: 1 };
   const sizes = [.05, .3, .6, .95].map(fraction => sample({
@@ -129,7 +153,10 @@ test('charge, flight and recovery follow the engine timeline inside the authored
   assert.equal(sample(effect)?.phase, 'flight');
   assert.equal(sample(effect)?.travel, 0);
   effect.age = (release + contact) / 2;
-  assert.ok(Math.abs(sample(effect)!.travel - .5) < 1e-12);
+  // Belinda là hào quang: giữa flight vẫn đứng tại chỗ. Đạn mới có tiến độ .5.
+  assert.equal(sample(effect)!.travel, 0);
+  const shot = { ...effect, sourceHeroId: 'raine' };
+  assert.ok(Math.abs(sample(shot)!.travel - .5) < 1e-12);
   effect.age = contact;
   assert.equal(sample(effect)?.phase, 'recovery');
   assert.equal(sample(effect)?.clip, 'active', 'contact alone never fabricates an impact burst');

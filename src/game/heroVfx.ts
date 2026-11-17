@@ -26,7 +26,18 @@ export interface HeroVfxDefinition {
   readonly sourceId: string;
   readonly url: string;
   readonly directional: boolean;
+  /** Hào quang nở tại chỗ, đòn chém xảy ra tại mục tiêu, đạn bay qua sân. */
+  readonly travelMode: VfxTravelMode;
 }
+
+export type VfxTravelMode = 'projectile' | 'melee' | 'aura';
+
+/** Chia theo họ chiêu đã tác giả trong manifest, không đoán theo tên tướng. */
+const TRAVEL_BY_FAMILY: Readonly<Record<string, VfxTravelMode | undefined>> = Object.freeze({
+  gunfire: 'projectile', volley: 'projectile', lance: 'projectile',
+  strike: 'melee',
+  sigil: 'aura', bloom: 'aura', storm: 'aura',
+});
 
 /** Cùng manifest cho Blender và runtime; prebuild kiểm tra asset/source thật. */
 const authoredByHero = new Map(authoredEffects.map(spec => [spec.heroId, spec]));
@@ -37,6 +48,7 @@ export const HERO_VFX_DEFINITIONS: readonly HeroVfxDefinition[] = Object.freeze(
     sourceId: hero.sourceId,
     url: `/assets/vfx/${authoredByHero.get(hero.heroId)!.id}.glb`,
     directional: ['gunfire', 'volley', 'strike', 'lance'].includes(authoredByHero.get(hero.heroId)!.family),
+    travelMode: TRAVEL_BY_FAMILY[authoredByHero.get(hero.heroId)!.family] ?? 'aura',
   })),
 );
 
@@ -60,6 +72,7 @@ export interface HeroVfxSample {
   sourceInstanceId?: string;
   support: boolean;
   directional: boolean;
+  travelMode: VfxTravelMode;
   clip: VfxClip;
   slot: 'basic' | 'active' | 'ultimate';
   phase: VfxPhase;
@@ -116,7 +129,10 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
   const contact = effect.timeline?.hits[0]?.atMs !== undefined ? effect.timeline.hits[0].atMs / 1000 : effect.duration * .52;
   const phase: VfxPhase = impact ? 'impact'
     : effect.age < release ? 'charge' : effect.age < contact ? 'flight' : 'recovery';
-  const travel = impact ? 1 : clamp((effect.age - release) / Math.max(.001, contact - release), 0, 1);
+  // Hào quang ở lại quanh người niệm; đòn chém đã ở mục tiêu; chỉ đạn/thương/tên mới bay.
+  const flight = clamp((effect.age - release) / Math.max(.001, contact - release), 0, 1);
+  const travel = impact ? 1 : definition.travelMode === 'aura' ? 0
+    : definition.travelMode === 'melee' ? 1 : flight;
   const slot = effect.skillSlot === 'basic' || effect.skillSlot === 'ultimate' ? effect.skillSlot : 'active';
   const base = impact ? (slot === 'ultimate' || effect.ultimate ? 1.15 : slot === 'basic' ? .7 : .95)
     : slot === 'ultimate' ? 1.55 : slot === 'active' ? 1.1 : .5;
@@ -124,7 +140,8 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
   const magnitude = impact ? base * (1 + .75 * Math.sin(progress * Math.PI / 2)) : base;
   return {
     id: effect.id, heroId: effect.sourceHeroId, sourceId: definition.sourceId,
-    sourceInstanceId: effect.sourceId, support: effect.support, directional: definition.directional, clip, slot, phase,
+    sourceInstanceId: effect.sourceId, support: effect.support, directional: definition.directional,
+    travelMode: definition.travelMode, clip, slot, phase,
     age: effect.age, progress, travel,
     opacity: impact ? .95 * Math.pow(1 - progress, 2)
       : phase === 'recovery' ? VFX_STYLE.flightOpacity * (1 - smoothProgress(

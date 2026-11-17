@@ -192,15 +192,16 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       flatten = layer === 'ground' ? .55 : 1;
     } else if (layer === 'ground') {
       center = origin; flatten = .62;
-    } else if (sample.phase === 'flight') {
+    } else if (sample.phase === 'flight' || sample.phase === 'recovery') {
+      // Hào quang đứng tại chỗ, đòn chém nằm ở mục tiêu, đạn mới bay theo cung.
       const travel = sample.travel;
+      const arc = sample.travelMode === 'projectile' && sample.phase === 'flight'
+        && !frame.reducedMotion ? Math.sin(travel * Math.PI) * VFX_STYLE.arcHeight * scale : 0;
       center = {
         x: muzzle.x + (chest.x - muzzle.x) * travel,
-        y: muzzle.y + (chest.y - muzzle.y) * travel
-          - (frame.reducedMotion ? 0 : Math.sin(travel * Math.PI) * VFX_STYLE.arcHeight * scale),
+        y: muzzle.y + (chest.y - muzzle.y) * travel - arc,
       };
-    } else if (sample.phase === 'recovery') center = chest;
-    else center = muzzle;
+    } else center = muzzle;
     const radius = VFX_STYLE.radius * scale * sample.magnitude;
     instance.root.position.set(center.x - frame.width / 2, frame.height / 2 - center.y, layer === 'ground' ? -12 : 0);
     const facing = layer === 'front' && sample.directional && !sample.support && !impact ? toward : 1;

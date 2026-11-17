@@ -188,6 +188,29 @@ test('the LOW preset skips the halo pass to protect weak GPUs', async () => {
   scene.dispose();
 });
 
+test('auras stay on the caster while sword slashes land on the target', async () => {
+  const rootX = async (heroId: string, asset: string, age: number) => {
+    const screen = surface();
+    const bytes = readFileSync(new URL(`../../public/assets/vfx/${asset}.glb`, import.meta.url));
+    const scene = createHeroVfxScene(THREE, { loadModel: async () =>
+      new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '') });
+    const effect = { ...cast('active', age), sourceHeroId: heroId };
+    scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+    for (let attempt = 0; attempt < 200 && scene.status(getHeroVfx(heroId)!.sourceId) === 'loading'; attempt++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 5));
+    }
+    scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+    let root: THREE.Object3D = screen.captures.at(-1)!.meshes[0];
+    while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+    const x = root.position.x;
+    scene.dispose();
+    return x;
+  };
+  const aura = await rootX('belinda', 'belinda', .6);
+  const melee = await rootX('astral_blademaster', 'thane', .6);
+  assert.ok(melee - aura > 100, `a slash must land near the enemy (${melee}) not at the caster (${aura})`);
+});
+
 test('projectile remains at contact instead of snapping back during recovery', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   scene.draw(screen.renderer, screen.ctx, [cast('active', .599)], 'front', frame);
