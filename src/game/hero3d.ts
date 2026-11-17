@@ -7,6 +7,8 @@ import { createBelindaSpellScene, type BelindaSpellFrame } from './belindaSpell3
 import { getHeroModel, HERO_MODEL_DEFINITIONS } from './heroModels';
 import { createHeroVfxScene, type HeroVfxFrame, type LoadedVfx } from './heroVfx3d';
 import { getHeroVfx, HERO_VFX_DEFINITIONS } from './heroVfx';
+import { createArenaScene, type ArenaFrame, type LoadedArena } from './arenaScene3d';
+import type { ArenaDefinition, ArenaSceneId } from './arena3d';
 
 export type HeroClip = 'idle' | 'run' | 'basic' | 'active' | 'ultimate' | 'hit' | 'death';
 export type HeroModelStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -89,6 +91,9 @@ export interface HeroRenderBackend {
   modelStatus?(heroId: string): HeroModelStatus;
   /** Blender effect-asset status per hero; separate from the body-model status. */
   vfxStatus?(heroId: string): string;
+  /** Draws the Blender arena behind the fighters; false when no scene is ready. */
+  drawArena?(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean;
+  arenaStatus?(id: ArenaSceneId): string;
 }
 
 export interface HeroModelDiagnostic { heroId: string; status: HeroModelStatus }
@@ -104,6 +109,8 @@ export interface HeroBackendDependencies {
   loadModel: (url: string) => Promise<LoadedGltf>;
   /** Optional override for Blender effect GLBs so body-model tests stay isolated. */
   loadVfx?: (url: string) => Promise<LoadedVfx>;
+  /** Optional override for arena GLBs; the arena shares this backend's renderer. */
+  loadArena?: (url: string) => Promise<LoadedArena>;
 }
 type ThreeNamespace = typeof import('three');
 type ModelRecord = {
@@ -170,6 +177,10 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
   const staffAnchors = new Map<string, { x: number; y: number }>();
   const spells = createBelindaSpellScene(THREE);
   const vfx = createHeroVfxScene(THREE, { loadModel: dependencies?.loadVfx });
+  const arena = createArenaScene(THREE, {
+    loadModel: dependencies?.loadArena ?? (url =>
+      import('three/addons/loaders/GLTFLoader.js').then(({ GLTFLoader }) => new GLTFLoader().loadAsync(url))),
+  });
   let queueBusy = false;
   let generation = 0;
   let disposed = false;
@@ -235,6 +246,12 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       if (disposed) return 'failed';
       const definition = getHeroVfx(heroId);
       return definition ? vfx.status(definition.sourceId) : 'disabled';
+    },
+    arenaStatus: (id: ArenaSceneId): string => disposed ? 'failed' : arena.status(id),
+    drawArena(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean {
+      if (disposed) return false;
+      try { return arena.draw(renderer, ctx, definition, frame); }
+      catch { return false; }
     },
     beginFrame() { vfxHandled.clear(); },
     vfxDrawnIds() { return [...vfxHandled]; },
@@ -315,6 +332,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       generation++;
       resetInstances();
       vfx.reset();
+      arena.reset();
       queue.splice(0).forEach(heroId => { const record = records.get(heroId); if (record && !record.inFlight) record.state = 'idle'; });
       for (const record of records.values()) {
         if (record.state === 'ready') { disposeTemplate(record); record.state = 'idle'; }
@@ -324,7 +342,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       if (disposed) return;
       disposed = true; generation++; queue.length = 0; resetInstances();
       for (const record of records.values()) { if (record.state === 'ready') disposeTemplate(record); }
-      vfx.dispose(); spells.dispose(); renderer.dispose(); renderer.forceContextLoss();
+      arena.dispose(); vfx.dispose(); spells.dispose(); renderer.dispose(); renderer.forceContextLoss();
     },
   };
 }
@@ -370,6 +388,24 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
     vfxModelStatuses,
     vfxDrawnIds: (): readonly number[] => {
       try { return backend?.vfxDrawnIds?.() || []; } catch { return []; }
+    },
+    arenaStatus: (id: ArenaSceneId): string => {
+      if (state === 'disposed' || state === 'failed') return 'failed';
+      try { return backend?.arenaStatus?.(id) || 'idle'; } catch { return 'failed'; }
+    },
+    /** Loads the backend on demand so the arena can render before any hero body does. */
+    drawArena(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean {
+      if (state === 'disposed' || state === 'failed') return false;
+      if (state === 'idle') {
+        state = 'loading';
+        Promise.resolve().then(load).then(loaded => {
+          if (state === 'disposed') { loaded.dispose(); return; }
+          backend = loaded; state = 'ready';
+        }).catch(() => { if (state !== 'disposed') { state = 'failed'; release(); } });
+      }
+      if (!backend?.drawArena) return false;
+      try { return backend.drawArena(ctx, definition, frame); }
+      catch { state = 'failed'; release(); return false; }
     },
     beginFrame,
     diagnostics(): Hero3DDiagnostic { return { status: state, heroes: modelStatuses(), renderedIds: [...renderedIds] }; },

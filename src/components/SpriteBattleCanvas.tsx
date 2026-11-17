@@ -20,6 +20,7 @@ import { soundEngine } from '../game/audio';
 import { createHero3D } from '../game/hero3d';
 import { spellEffectsForFallback } from '../game/belindaSpell3d';
 import { getHeroVfx } from '../game/heroVfx';
+import { resolveArenaScene } from '../game/arena3d';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -83,6 +84,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     const feed: UltimateAnnouncement[] = [];
     const publishAnnouncements = () => setAnnouncements(feed.map(entry => ({ ...entry })));
     let impactShake = 0, visualClock = 0;
+    /** Start of the most recent ultimate cast, for the arena's one-shot pulse. */
+    let lastUltimateAtMs: number | undefined;
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const reduceMotion = () => live.current.reducedMotion || motionPreference.matches;
     const observe = createBattlePresentationObserver();
@@ -138,6 +141,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
           if (event.type === 'basic_attack') soundEngine.playBasicAttack(source!.isRanged ? 'ranged' : 'melee');
           else if (event.type === 'ultimate_cast') {
             feedChanged = addUltimateAnnouncement(feed, event, source) || feedChanged;
+            lastUltimateAtMs = event.timestampMs;
             soundEngine.playUltimateCast();
           } else soundEngine.playSkillCast('arcane');
         }
@@ -189,6 +193,22 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         const angle = i / 12 * Math.PI * 2;
         ctx.beginPath(); ctx.moveTo(width / 2 + Math.cos(angle) * width * 0.39, height * 0.57 + Math.sin(angle) * height * 0.18);
         ctx.lineTo(width / 2 + Math.cos(angle) * width * 0.59, height * 0.57 + Math.sin(angle) * height * 0.27); ctx.stroke();
+      }
+      // Lớp sân Blender vẽ đè lên ellipse nền; asset tải xong mới hiện, lỗi thì giữ nền phẳng.
+      const scene = resolveArenaScene(theme, arena);
+      if (scene) {
+        // Vòng sáng sân chỉ chạy trong 1,65 s kể từ lần tung tuyệt kỹ gần nhất.
+        const sinceUltimate = lastUltimateAtMs === undefined ? undefined
+          : (simulation.current?.getElapsedMs() ?? 0) + accumulator - lastUltimateAtMs;
+        const pulseAge = sinceUltimate !== undefined && sinceUltimate >= 0 && sinceUltimate < 1650
+          ? sinceUltimate / 1000 : undefined;
+        const drawn = heroes3d.drawArena(ctx, scene, { width, height, centerX: width / 2, centerY: height * 0.57,
+          radiusX: width * 0.66, radiusY: height * 0.31, reducedMotion: !!reduceMotion(),
+          pulseAge, wallClock: visualClock });
+        canvas.dataset.arena3d = JSON.stringify({ scene: scene.id, drawn,
+          status: heroes3d.arenaStatus(scene.id), pulse: pulseAge !== undefined });
+      } else {
+        canvas.dataset.arena3d = JSON.stringify({ scene: null });
       }
     };
     const drawUnit = (unit: BattleUnitRuntime, dt: number, overlayOnly = false) => {

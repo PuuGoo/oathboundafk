@@ -1,0 +1,47 @@
+{
+  "id": "storm",
+  "theme": "tempest",
+  "name": "Tempest Ridge",
+  "radius": 100.0,
+  "source": "assets-source/arenas/storm/storm.blend",
+  "asset": "storm.glb",
+  "generator": "tools/build-arena.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Weathered stone ledge, tattered banners and storm-lit runes.",
+  "rights": "New geometry does not establish rights to referenced designs.",
+  "coordinates": {
+    "up": "Y",
+    "floorPlane": "XZ",
+    "center": "Arena center at origin"
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "seconds": 4,
+      "channels": 65
+    },
+    {
+      "name": "pulse",
+      "seconds": 1.65,
+      "channels": 66
+    }
+  ],
+  "runtimeContract": "Background presentation only. Simulation owns positions; runtime scales the disc to the drawn arena ellipse.",
+  "limitations": [
+    "Procedural study, not a human-approved art pass.",
+    "Fog, bloom and colour grading are applied at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 771156,
+    "glbSha256": "4caf075743b5df7c22c5038dd2f819260e140c272c8384a7621bb390d34d4917",
+    "generatorSha256": "9fc693e1fdcf08a168dc1d5c0f9c213278939b325dd6c0d8e206c72ee645dc8c",
+    "specSha256": "463ccfaf0e90cf947a65e704cf5ff8b2c5b313402b58f64911999b380402f134",
+    "staticObjects": 4,
+    "animatedObjects": 35,
+    "vertices": 10384,
+    "triangles": 20088,
+    "meshes": 39,
+    "materials": 5
+  }
+}

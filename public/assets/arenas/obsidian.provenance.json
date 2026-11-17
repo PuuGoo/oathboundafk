@@ -1,0 +1,47 @@
+{
+  "id": "obsidian",
+  "theme": "obsidian",
+  "name": "Obsidian Throne",
+  "radius": 100.0,
+  "source": "assets-source/arenas/obsidian/obsidian.blend",
+  "asset": "obsidian.glb",
+  "generator": "tools/build-arena.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "Black glass steps with ember veins and a throne-lit horizon.",
+  "rights": "New geometry does not establish rights to referenced designs.",
+  "coordinates": {
+    "up": "Y",
+    "floorPlane": "XZ",
+    "center": "Arena center at origin"
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "seconds": 4,
+      "channels": 65
+    },
+    {
+      "name": "pulse",
+      "seconds": 1.65,
+      "channels": 66
+    }
+  ],
+  "runtimeContract": "Background presentation only. Simulation owns positions; runtime scales the disc to the drawn arena ellipse.",
+  "limitations": [
+    "Procedural study, not a human-approved art pass.",
+    "Fog, bloom and colour grading are applied at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 771204,
+    "glbSha256": "d89d55884f504530a51cf222946a0bd6a3eb295e49137cab85e3b625c6a7f9a1",
+    "generatorSha256": "9fc693e1fdcf08a168dc1d5c0f9c213278939b325dd6c0d8e206c72ee645dc8c",
+    "specSha256": "463ccfaf0e90cf947a65e704cf5ff8b2c5b313402b58f64911999b380402f134",
+    "staticObjects": 4,
+    "animatedObjects": 35,
+    "vertices": 10384,
+    "triangles": 20088,
+    "meshes": 39,
+    "materials": 5
+  }
+}

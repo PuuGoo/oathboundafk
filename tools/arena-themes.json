@@ -1,0 +1,7 @@
+[
+  {"id":"temple","theme":"sanctuary","name":"Celestial Temple","primary":"f0dcae","secondary":"8d7250","accent":"ffd98a","floor":"b99a6b","glow":0.45,"note":"Ivory-marble dais with gilded inlays, braziers and pale gold light."},
+  {"id":"forest","theme":"sylvan","name":"Enchanted Forest","primary":"8fc08a","secondary":"2f5b3f","accent":"b6f0a8","floor":"4f6b4a","glow":0.35,"note":"Mossy forest floor with pale roots, glowing spores and canopy shadows."},
+  {"id":"shadow","theme":"catacombs","name":"Shadow Catacombs","primary":"8a76a8","secondary":"2a2136","accent":"c58ce6","floor":"40364f","glow":0.55,"note":"Obsidian slabs with violet cracks, bone pillars and cold mist."},
+  {"id":"storm","theme":"tempest","name":"Tempest Ridge","primary":"8fb6d8","secondary":"2c3f57","accent":"9fe4ff","floor":"3d5164","glow":0.5,"note":"Weathered stone ledge, tattered banners and storm-lit runes."},
+  {"id":"obsidian","theme":"obsidian","name":"Obsidian Throne","primary":"b89ad6","secondary":"241d2e","accent":"e6a6ff","floor":"332a42","glow":0.6,"note":"Black glass steps with ember veins and a throne-lit horizon."}
+]
