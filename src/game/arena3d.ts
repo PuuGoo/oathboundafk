@@ -1,6 +1,7 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 /** Arena themes that have a Blender-authored scene in `public/assets/arenas`. */
 import authoredArenas from '../../tools/arena-themes.json';
+import authoredFog from '../../tools/arena-fog.json';
 
 export type ArenaSceneId = 'temple' | 'forest' | 'shadow' | 'storm' | 'obsidian';
 
@@ -59,6 +60,19 @@ export function arenaLighting(id: ArenaSceneId): ArenaLighting {
     key: hexToRgb(spec.primary), rim: hexToRgb(spec.accent),
     sky: hexToRgb(spec.primary), ground: hexToRgb(spec.secondary),
   });
+}
+
+/** Sương khoảng cách theo theme, đọc từ `tools/arena-fog.json` như mọi giá trị trình diễn. */
+export interface ArenaFogDepth {
+  /** Camera-space depth (world units) where haze starts. */
+  readonly near: number;
+  /** Depth where distant geometry fully takes the arena colour. */
+  readonly far: number;
+}
+
+export function arenaFogDepth(id: ArenaSceneId): ArenaFogDepth {
+  const spec = authoredFog.find(entry => entry.id === id) ?? authoredFog[0];
+  return Object.freeze({ near: spec.near, far: spec.far });
 }
 
 /** Nhịp sáng sân: lên nhanh, giữ ngắn, tan mềm trước khi clip kết thúc. */

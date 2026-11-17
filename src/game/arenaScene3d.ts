@@ -1,7 +1,8 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type * as Three from 'three';
 import {
-  ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, sampleArenaPulse, arenaPulseOpacity, type ArenaDefinition, type ArenaSceneId,
+  arenaFogDepth, arenaLighting, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, sampleArenaPulse, arenaPulseOpacity,
+  type ArenaDefinition, type ArenaSceneId,
 } from './arena3d';
 
 /**
@@ -68,6 +69,11 @@ function disposeObject(THREE: Namespace, root: Three.Object3D): void {
 
 export function createArenaScene(THREE: Namespace, dependencies: ArenaDependencies) {
   const scene = new THREE.Scene();
+  // Ngưỡng sương đọc từ `tools/arena-fog.json`; camera ở CAMERA_DISTANCE nên tiền cảnh luôn rõ.
+  // Chỉ scene sân có fog; không đổi clear color của renderer dùng chung với tướng/VFX.
+  const baseFog = arenaFogDepth('temple');
+  const fog = new THREE.Fog(arenaLighting('temple').ground, baseFog.near, baseFog.far);
+  scene.fog = fog;
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 4000);
   let elevation = elevationForEllipse(.66, .31);
   const placeCamera = (): void => {
@@ -150,6 +156,10 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
   const activate = (record: Record_, id: ArenaSceneId): Active | undefined => {
     if (!record.template || !record.clips) return;
     dropActive();
+    fog.color.setHex(arenaLighting(id).ground);
+    const depth = arenaFogDepth(id);
+    fog.near = depth.near;
+    fog.far = depth.far;
     const root = record.template.clone(true);
     root.visible = true;
     // Alpha nhẹ để lớp sàn 3D hoà vào bầu trời Canvas2D phía sau thay vì cắt cứng.
@@ -161,7 +171,11 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         copy.transparent = true;
         if (object.name.startsWith('Pulse')) copy.depthWrite = false;
         copy.side = THREE.DoubleSide;
-        if (copy instanceof THREE.MeshStandardMaterial) copy.emissiveIntensity *= .8;
+        if (copy instanceof THREE.MeshStandardMaterial) {
+          copy.emissiveIntensity *= .8;
+          // Sương chỉ phủ đá/kiến trúc; vòng sáng, rune và lửa vẫn giữ màu phát sáng.
+          copy.fog = !/arena_(glow|ember)/.test(copy.name);
+        }
         return copy;
       });
       object.material = Array.isArray(object.material) ? cloned : cloned[0];

@@ -1,0 +1,7 @@
+[
+  {"id":"temple","near":400,"far":640,"note":"Temple stone fades slowly so gilded trim still reads at the far wall."},
+  {"id":"forest","near":390,"far":690,"note":"Forest canopy haze starts close but stays thin, keeping the tree line soft behind the fighters."},
+  {"id":"shadow","near":400,"far":640,"note":"Catacomb mist is deep and narrow so violet cracks keep contrast without flooding the hall."},
+  {"id":"storm","near":400,"far":660,"note":"Storm ridge haze is the thinnest, letting distant peaks stay legible."},
+  {"id":"obsidian","near":390,"far":670,"note":"Obsidian ember light keeps a wide falloff so the black steps do not swallow the horizon."}
+]

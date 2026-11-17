@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createArenaScene, type LoadedArena } from './arenaScene3d';
-import { ARENA_DEFINITIONS, ARENA_CLIP_SECONDS } from './arena3d';
+import { arenaFogDepth, arenaLighting, ARENA_DEFINITIONS, ARENA_CLIP_SECONDS } from './arena3d';
 
 const surface = () => {
   const stats = { renders: 0, draws: 0, lost: false };
@@ -175,6 +175,98 @@ test('light rings float above the stone floor instead of being buried in it', as
     assert.equal(seen.length, 2, `${definition.id}: expected pulse ring and idle halo`);
     assert.deepEqual(buried, [], `${definition.id}: rings sunk inside the floor slab: ${buried.join(', ')}`);
   }
+});
+
+test('arena fog adds depth to real backdrop vertices while leaving the front clear', async () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const screen = surface();
+    const scene = createArenaScene(THREE, { loadModel: realArena(definition.id) });
+    const weights: { front: number[]; back: number[] } = { front: [], back: [] };
+    let renders = 0;
+    screen.renderer.render = (root, camera) => {
+      renders++;
+      root.updateMatrixWorld(true); camera.updateMatrixWorld(true);
+      assert.ok(root instanceof THREE.Scene);
+      assert.ok(root.fog instanceof THREE.Fog, `${definition.id}: arena needs distance fog`);
+      const fog = root.fog;
+      assert.equal(fog.color.getHex(), arenaLighting(definition.id).ground, 'fog follows the theme palette');
+      const depth = arenaFogDepth(definition.id);
+      assert.deepEqual([fog.near, fog.far], [depth.near, depth.far],
+        `${definition.id}: fog depth comes from tools/arena-fog.json`);
+      assert.ok(depth.near > 300 && depth.far > depth.near && depth.far < 700,
+        `${definition.id}: fog must sit behind the fighters, not over the front of the disc`);
+      assert.ok(root.background === null, 'fog must leave the transparent sky intact');
+      const point = new THREE.Vector3();
+      root.traverseVisible(object => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        const luminous = materials.some(material => /arena_(glow|ember)/.test(material.name));
+        for (const material of materials) {
+          assert.equal((material as THREE.MeshStandardMaterial).fog, !luminous,
+            `${material.name}: light rings, runes and flames keep their authored contrast`);
+        }
+        if (!object.name.startsWith('Arena_static_') || luminous) return;
+        const positions = object.geometry.getAttribute('position');
+        for (let index = 0; index < positions.count; index++) {
+          point.fromBufferAttribute(positions, index).applyMatrix4(object.matrixWorld);
+          const region = point.z > 35 && point.y < 4 ? 'front'
+            : point.z < -110 && point.y > 12 ? 'back' : undefined;
+          if (!region) continue;
+          point.applyMatrix4(camera.matrixWorldInverse);
+          // GLSL fog_fragment uses camera-space -z, not Euclidean camera distance.
+          const t = THREE.MathUtils.clamp((-point.z - fog.near) / (fog.far - fog.near), 0, 1);
+          weights[region].push(t * t * (3 - 2 * t));
+        }
+      });
+    };
+    try {
+      scene.draw(screen.renderer, screen.ctx, definition, frame());
+      await ready(scene, definition.id);
+      for (const [width, height] of [[480, 680], [960, 720], [420, 600]] as const) {
+        weights.front.length = 0; weights.back.length = 0;
+        const view = frame({ width, height, centerX: width / 2, centerY: height * .57,
+          radiusX: width * .66, radiusY: height * .31 });
+        assert.equal(scene.draw(screen.renderer, screen.ctx, definition, view), true);
+        assert.ok(weights.front.length > 50 && weights.back.length > 50, 'measure the floor and actual backdrop geometry');
+        assert.equal(Math.max(...weights.front), 0, 'front stone retains full contrast');
+        const mean = weights.back.reduce((sum, value) => sum + value, 0) / weights.back.length;
+        assert.ok(mean > .1 && mean < .5,
+          `${definition.id}/${width}x${height}: backdrop fog ${mean} must add depth without hiding architecture`);
+      }
+      assert.equal(renders, 3, 'one render per view, without an extra fog pass');
+      assert.equal(screen.stats.draws, 3, 'one composite per view, without an extra fog pass');
+    } finally { scene.dispose(); }
+  }
+});
+
+test('changing arena and resetting refreshes fog without painting over the transparent sky', async () => {
+  const screen = surface();
+  const fogStates: { colour: number; near: number; far: number }[] = [];
+  screen.renderer.render = root => {
+    assert.ok(root instanceof THREE.Scene);
+    assert.equal(root.background, null);
+    assert.ok(root.fog instanceof THREE.Fog);
+    fogStates.push({ colour: root.fog.color.getHex(), near: root.fog.near, far: root.fog.far });
+  };
+  const scene = createArenaScene(THREE, { loadModel: url => realArena(url.split('/').at(-1)!.replace('.glb', ''))() });
+  try {
+    for (const id of ['temple', 'shadow', 'storm', 'temple'] as const) {
+      const definition = at(id);
+      scene.draw(screen.renderer, screen.ctx, definition, frame({ reducedMotion: true }));
+      if (scene.status(id) === 'loading') await ready(scene, id);
+      scene.draw(screen.renderer, screen.ctx, definition, frame({ reducedMotion: true }));
+      assert.equal(fogStates.at(-1)?.colour, arenaLighting(id).ground);
+      assert.deepEqual([fogStates.at(-1)?.near, fogStates.at(-1)?.far],
+        [arenaFogDepth(id).near, arenaFogDepth(id).far], `${id}: fog depth refreshed with the theme`);
+    }
+    scene.reset();
+    scene.draw(screen.renderer, screen.ctx, at('forest'), frame());
+    await ready(scene, 'forest');
+    scene.draw(screen.renderer, screen.ctx, at('forest'), frame());
+    assert.equal(fogStates.at(-1)?.colour, arenaLighting('forest').ground);
+    assert.deepEqual([fogStates.at(-1)?.near, fogStates.at(-1)?.far],
+      [arenaFogDepth('forest').near, arenaFogDepth('forest').far], 'reset must not keep the old fog depth');
+  } finally { scene.dispose(); }
 });
 
 test('switching theme swaps the scene and keeps exactly one active arena', async () => {

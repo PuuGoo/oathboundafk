@@ -2,12 +2,13 @@
 // QA sân đấu 3D trên production preview, profile tạm và save giả; không đọc save thật.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { OATHBOUND_HEROES } from '../src/game/oathboundHeroes.ts';
-import { ARENA_DEFINITIONS } from '../src/game/arena3d.ts';
+import { arenaFogDepth, arenaLighting, ARENA_DEFINITIONS } from '../src/game/arena3d.ts';
+import { canvasFogColor } from './arena-fog-colour.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.join(root, 'production/qa/evidence/arena3d');
@@ -16,7 +17,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const stageId = Number(process.argv[2] || 1);
 const seconds = Number(process.argv[3] || 20);
-const prefix = `arena-runtime-stage${stageId}-${seconds}s`;
+const verifyFog = process.argv.includes('--verify-fog');
+const prefix = `arena-runtime-stage${stageId}-${seconds}s${verifyFog ? '-fog' : ''}`;
 const scratch = path.join(process.env.LOCALAPPDATA, 'hermes/cache/scratch');
 fs.mkdirSync(scratch, { recursive: true }); fs.mkdirSync(output, { recursive: true });
 const profile = fs.mkdtempSync(path.join(scratch, 'arena3d-qa-'));
@@ -70,6 +72,30 @@ try {
     throw Error('Timed out: ' + expression + ' :: ' + JSON.stringify(await evaluate(arenaState)));
   };
   await call('Page.enable'); await call('Runtime.enable'); await call('Network.enable');
+  if (verifyFog) {
+    // Chỉ trong profile QA: đọc uniform thật khi shader đang vẽ, không thay dữ liệu game.
+    await call('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+      window.__arenaFogDraws = new Map();
+      const proto = WebGL2RenderingContext.prototype;
+      const original = proto.drawElements;
+      proto.drawElements = function (...args) {
+        const program = this.getParameter(this.CURRENT_PROGRAM);
+        if (program) {
+          const near = this.getUniformLocation(program, 'fogNear');
+          if (near !== null) {
+            const far = this.getUniformLocation(program, 'fogFar');
+            const color = this.getUniformLocation(program, 'fogColor');
+            if (far !== null && color !== null) {
+              const state = { near: this.getUniform(program, near), far: this.getUniform(program, far),
+                color: Array.from(this.getUniform(program, color)) };
+              window.__arenaFogDraws.set(JSON.stringify(state), state);
+            }
+          }
+        }
+        return original.apply(this, args);
+      };
+    })();` });
+  }
   await call('Emulation.setDeviceMetricsOverride', { width: 1100, height: 880, deviceScaleFactor: 1, mobile: false });
   // Hash của mọi GLB sân phải khớp file build đang phục vụ.
   for (const definition of ARENA_DEFINITIONS) {
@@ -93,6 +119,20 @@ try {
   await wait(`(${arenaState}).drawn===true`, 25000);
   result.arenas.ready = await evaluate(arenaState);
   assert.equal(result.arenas.ready.drawn, true, 'arena never rendered');
+  if (verifyFog) {
+    await wait('window.__arenaFogDraws?.size > 0');
+    result.fogUniforms = await evaluate('[...window.__arenaFogDraws.values()]');
+    // fogColor lên GPU là kênh sRGB vì canvas renderer.outputColorSpace = SRGBColorSpace.
+    // Ngưỡng near/far đọc từ cùng `tools/arena-fog.json` mà runtime dùng.
+    const sceneId = result.arenas.ready.scene;
+    const depth = arenaFogDepth(sceneId);
+    const expected = canvasFogColor(arenaLighting(sceneId).ground);
+    result.fogExpected = { near: depth.near, far: depth.far, color: expected };
+    assert.ok(result.fogUniforms.some(fog => Math.abs(fog.near - depth.near) < 1e-5
+      && Math.abs(fog.far - depth.far) < 1e-5
+      && fog.color.every((channel, index) => Math.abs(channel - expected[index]) < 1e-5)),
+    'No drawn shader used the expected arena fog uniforms');
+  }
   const shot = async name => {
     const bytes = Buffer.from((await call('Page.captureScreenshot', { format: 'png' })).data, 'base64');
     fs.writeFileSync(path.join(output, `${prefix}-${name}.png`), bytes);
@@ -132,11 +172,16 @@ try {
   fs.writeFileSync(path.join(output, `${prefix}-browser.json`), JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify({ mode: prefix, scene: result.arenas.ready.scene, drawn: result.arenas.ready.drawn,
     pausePixelsStable: result.pausePixelsStable, x2Drawn: result.arenas.afterX2.drawn,
-    errors: result.errors.length, failedAssets: result.failedAssets }));
+    errors: result.errors.length, failedAssets: result.failedAssets,
+    ...(verifyFog ? { fogUniforms: result.fogUniforms } : {}) }));
 } catch (error) {
   fs.writeFileSync(path.join(output, `${prefix}-failure.json`), JSON.stringify({ ...result, failure: String(error) }, null, 2) + '\n');
   throw error;
 } finally {
+  // Chỉ dừng cây Chrome do lượt QA này tạo, không đụng trình duyệt của người dùng.
+  if (chrome.pid && chrome.exitCode === null) {
+    spawnSync('taskkill', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' });
+  }
   ws?.close(); chrome.kill();
   await new Promise(resolve => { if (chrome.exitCode !== null) resolve(); else { chrome.once('exit', resolve); setTimeout(resolve, 3000); } });
   try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { /* profile tạm */ }
