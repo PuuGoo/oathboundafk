@@ -1,0 +1,56 @@
+{
+  "id": "sonja",
+  "heroId": "sonja",
+  "name": "Sonja",
+  "family": "strike",
+  "source": "assets-source/vfx/sonja/sonja.blend",
+  "asset": "sonja.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "L\u01b0\u1ee1i li\u1ec1m h\u1ed3ng nguy\u1ec7t, c\u00e1nh h\u1ed3ng gai v\u00e0 v\u00f2ng ch\u1ea1m quanh ki\u1ebfm t\u1ea7m xu\u00e2n c\u1ee7a Sonja.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 40
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 40
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 40
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 40
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 193276,
+    "glbSha256": "f79fa2f64fa72f28e2f99809ae2cf3308dbf6558d68eeccd1e17413e3f5058ad",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "c2e070a7257c453b4261d3d9042aa21cc4ee66552aaf9c051de7db61b51afce4",
+    "objects": 14,
+    "vertices": 557,
+    "triangles": 914,
+    "meshes": 14,
+    "materials": 3
+  }
+}

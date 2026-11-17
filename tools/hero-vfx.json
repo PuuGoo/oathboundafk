@@ -18,5 +18,6 @@
   {"id":"walker","heroId":"walker","family":"gunfire","name":"Walker","primary":"f4d3a0","secondary":"4a3d40","accent":"e5b05a","intensity":1.2,"note":"Chớp nòng kép vàng đồng, vệt đạn dày và vòng xung kích cho shotgun của Walker."},
   {"id":"morrow","heroId":"morrow","family":"storm","name":"Morrow","primary":"c9b6de","secondary":"792d52","accent":"c978d9","intensity":1.15,"note":"Tia chớp tím, con mắt sách cổ và vòng xung kích hắc ám của Morrow."},
   {"id":"scarlet","heroId":"scarlet","family":"storm","name":"Scarlet","primary":"f0c6d8","secondary":"8d2746","accent":"b67bdd","intensity":1.2,"note":"Tia chớp đỏ thẫm, gai pha lê tím và vành xung kích quanh trượng hắc ám của Scarlet."},
-  {"id":"thane-awakened","heroId":"hero_134_thane","family":"strike","name":"Thane - The Veiled Wind","primary":"d2e2df","secondary":"427c80","accent":"92eee2","intensity":1.15,"note":"Lưỡi gió ngọc bạc, vệt khăn bay và vòng xung kích xanh ngọc của Thane thức tỉnh."}
+  {"id":"thane-awakened","heroId":"hero_134_thane","family":"strike","name":"Thane - The Veiled Wind","primary":"d2e2df","secondary":"427c80","accent":"92eee2","intensity":1.15,"note":"Lưỡi gió ngọc bạc, vệt khăn bay và vòng xung kích xanh ngọc của Thane thức tỉnh."},
+  {"id":"sonja","heroId":"sonja","family":"strike","name":"Sonja","primary":"f2d6e4","secondary":"982f52","accent":"e674ac","intensity":1.15,"note":"Lưỡi liềm hồng nguyệt, cánh hồng gai và vòng chạm quanh kiếm tầm xuân của Sonja."}
 ]
