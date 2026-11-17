@@ -155,6 +155,28 @@ test('braziers, flames, pillars and banners stand on the floor instead of sinkin
   }
 });
 
+test('light rings float above the stone floor instead of being buried in it', async () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const bytes = readFileSync(new URL(`../../public/assets/arenas/${definition.id}.glb`, import.meta.url));
+    const gltf = await new GLTFLoader().parseAsync(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+    gltf.scene.updateMatrixWorld(true);
+    let floorTop = -Infinity;
+    const buried: string[] = [];
+    const seen: string[] = [];
+    gltf.scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const box = new THREE.Box3().setFromObject(object);
+      if (object.name.includes('arena_floor')) floorTop = Math.max(floorTop, box.max.y);
+      if (!/^(Pulse[ _]ring|Idle_halo)/.test(object.name)) return;
+      seen.push(object.name);
+      if (box.min.y <= floorTop) buried.push(`${object.name}@${box.min.y.toFixed(2)}`);
+    });
+    assert.equal(seen.length, 2, `${definition.id}: expected pulse ring and idle halo`);
+    assert.deepEqual(buried, [], `${definition.id}: rings sunk inside the floor slab: ${buried.join(', ')}`);
+  }
+});
+
 test('switching theme swaps the scene and keeps exactly one active arena', async () => {
   const screen = surface();
   let current = 'temple';

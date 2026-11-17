@@ -33,9 +33,9 @@
     "Fog, bloom and colour grading are applied at runtime, not baked."
   ],
   "metrics": {
-    "glbBytes": 872548,
-    "glbSha256": "f1d3d59751d1a78a07109938cf536375cfa4f9d305040102151ca3324611d42d",
-    "generatorSha256": "7d129b0dcc892e269d8a1dc709d994a89858af9af502dec72c474509f42995b3",
+    "glbBytes": 872528,
+    "glbSha256": "6b348624d8ee1860f277e4f05650da589e2636d6683a14be500512da95188453",
+    "generatorSha256": "a4f5401274786c7e65b560724180e10def3708ee64d91a6c7c5d3d7d93191ef2",
     "specSha256": "463ccfaf0e90cf947a65e704cf5ff8b2c5b313402b58f64911999b380402f134",
     "staticObjects": 4,
     "animatedObjects": 35,

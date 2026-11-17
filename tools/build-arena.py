@@ -249,8 +249,10 @@ def build_atmosphere():
             (math.cos(angle) * ring_radius, 8 + RNG.random() * 40, math.sin(angle) * ring_radius),
             role='mote', phase=RNG.random() * TAU, drift=.35 + RNG.random() * .5,
             rise=4 + RNG.random() * 8, orbit=ring_radius)
-    torus('Pulse ring', RADIUS * .5, 1.4, 'arena_glow', (0, 3.4, 0), role='pulse')
-    torus('Idle halo', RADIUS * .99, 1.0, 'arena_glow', (0, 1.2, 0), role='halo')
+    # Vòng sáng phải nổi trên mặt sàn (mặt sàn dày tới y=2, bệ trong tới 3.2),
+    # nếu không chúng bị chôn trong khối đá và gần như vô hình.
+    torus('Pulse ring', RADIUS * .5, 1.4, 'arena_glow', (0, 5.0, 0), role='pulse')
+    torus('Idle halo', RADIUS * .99, 1.0, 'arena_glow', (0, 4.6, 0), role='halo')
 
 
 def transform(record, u, clip):
