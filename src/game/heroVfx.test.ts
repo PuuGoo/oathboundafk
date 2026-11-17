@@ -41,6 +41,22 @@ test('only roster heroes with a committed Blender effect resolve, by stable hero
     'each hero needs its own effect file');
 });
 
+test('damage bursts fade softly and stay handled after fading without a late flash', () => {
+  const base = { ...outcome(), duration: 1 };
+  let previous = 1;
+  for (let step = 0; step <= 100; step++) {
+    const age = VFX_STYLE.impactSeconds * step / 100;
+    const value = sample({ ...base, age })!;
+    assert.equal(value.clip, 'impact');
+    assert.ok(value.opacity <= previous && value.opacity >= 0);
+    previous = value.opacity;
+  }
+  const nearEnd = sample({ ...base, age: VFX_STYLE.impactSeconds * .99 })!;
+  assert.ok(nearEnd.opacity < .001, 'opacity should flatten smoothly to zero');
+  assert.equal(sample({ ...base, age: .8 })!.opacity, 0, 'retain handled id through original lifetime');
+  assert.equal(sample({ ...base, age: -1 }), undefined, 'no anticipation of a damage outcome');
+});
+
 test('cast effects request the clip of their real slot; outcomes request the impact clip', () => {
   for (const slot of ['basic', 'active', 'ultimate'] as const) {
     assert.equal(sample(cast(slot))?.clip, slot);

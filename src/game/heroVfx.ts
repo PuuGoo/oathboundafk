@@ -120,7 +120,7 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
     id: effect.id, heroId: effect.sourceHeroId, sourceId: definition.sourceId,
     sourceInstanceId: effect.sourceId, support: effect.support, directional: definition.directional, clip, slot, phase,
     age: effect.age, progress, travel,
-    opacity: impact ? (1 - progress) * .95
+    opacity: impact ? .95 * Math.pow(1 - progress, 2)
       : phase === 'recovery' ? VFX_STYLE.flightOpacity * (1 - smoothProgress(
         (effect.age - contact) / Math.max(.001, effect.duration - contact)))
         : phase === 'charge' ? VFX_STYLE.chargeFloor
