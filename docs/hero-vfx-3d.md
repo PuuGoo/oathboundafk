@@ -48,6 +48,13 @@ Material được đặt tên cố định `vfx_core`, `vfx_glow`, `vfx_alt`, `v
 
 ## Trạng thái hiện tại
 
+### Đính chính sau rà soát runtime
+
+- Đã sửa recovery để projectile giữ điểm chạm thay vì nhảy về nguồn; regression dùng GLB thật thất bại trước sửa và đạt sau sửa. Caster và recipient được cập nhật theo instance cho toàn bộ hero có hiệu ứng, gồm Estrilda đang lao tới.
+- Các lượt Chrome hiện tại xác nhận cờ tốc độ ×2 và hiệu ứng tiếp tục được vẽ, chưa đo tiến độ animation của cùng một effect để chứng minh tỷ lệ thời gian gấp đôi.
+- `pauseStableFrom` là chỉ số **ảnh lấy mẫu**, cách nhau khoảng 350 ms, không phải chỉ số frame render. Quan sát ảnh đầu khác rồi các ảnh sau ổn định chưa xác định nguyên nhân; diễn giải trước đó là “một frame trễ” chưa được chứng minh. Probe pause sớm cũng chưa bắt buộc có GLB kỹ năng đang hiện.
+- Sau bản sửa recovery/anchor: 277/277 test và build đạt; chưa chạy lại kiểm tra GPU cho hai thay đổi này. Đây là giới hạn của bằng chứng, không phải kết luận mỹ thuật.
+
 - **22/22 danh tính** trong `OATHBOUND_HEROES` có GLB hiệu ứng riêng, `.blend` nguồn và provenance; mỗi tướng được push thành một commit riêng.
 - Kiểm tra asset một lượt cho cả roster: 22/22 GLB qua, 968 pose lấy mẫu bằng `AnimationMixer`, tổng **7.432.424 byte** GLB. Đây là dung lượng file, không phải RAM/GPU đo được.
 - Probe runtime kiểm pause/×2 **ngay khi trận mở**, vì stage 1 có thể kết thúc trước cửa sổ quan sát. Pause được kiểm bằng 5 ảnh: đồng hồ simulation phải đứng yên, tuổi effect phải đứng yên, và canvas phải ổn định trong tối đa một frame; `pauseStableFrom` ghi rõ mốc ổn định. Sau đó probe bật ×2 và đếm lại số hiệu ứng còn được vẽ (`x2DrawnAtEnd`).

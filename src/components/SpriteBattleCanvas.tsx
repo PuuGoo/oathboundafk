@@ -276,14 +276,17 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       advanceSpriteEffects(effects, playDt);
       for (const effect of effects) if (sim) {
         const metadata = effect as SpriteEffect & { sourceId?: string; outcomeAtMs?: number };
+        if (getHeroVfx(effect.sourceHeroId) && effect.kind === 'cast') {
+          const caster = sim.getUnits().find(unit => unit.instanceId === metadata.sourceId);
+          if (caster) effect.source = { x: caster.x, y: caster.y };
+        }
         if (effect.timeline && effect.startedAtMs !== undefined) {
           effect.age = Math.max(0, sim.getElapsedMs() - effect.startedAtMs + accumulator) / 1000;
-          const caster = effect.sourceHeroId === 'belinda' && sim.getUnits().find(unit => unit.instanceId === metadata.sourceId);
-          if (caster) effect.source = { x: caster.x, y: caster.y };
+
         } else if (effect.sourceHeroId === 'belinda' && metadata.outcomeAtMs !== undefined) {
           effect.age = Math.max(0, sim.getElapsedMs() + accumulator - metadata.outcomeAtMs) / 1000;
         }
-        if (effect.timeline || effect.sourceHeroId === 'belinda') {
+        if (effect.timeline || getHeroVfx(effect.sourceHeroId)) {
           const recipient = sim.getUnits().find(unit => unit.instanceId === effect.targetId);
           if (recipient) effect.target = { x: recipient.x, y: recipient.y };
         }

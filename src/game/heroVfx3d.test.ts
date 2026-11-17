@@ -58,6 +58,22 @@ const surface = () => {
   return { renderer, ctx, stats, captures };
 };
 
+test('projectile remains at contact instead of snapping back during recovery', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  scene.draw(screen.renderer, screen.ctx, [cast('active', .599)], 'front', frame);
+  await settle(scene);
+  const positions: THREE.Vector3[] = [];
+  for (const age of [.599, .6, .7]) {
+    scene.draw(screen.renderer, screen.ctx, [cast('active', age)], 'front', frame);
+    let root: THREE.Object3D = screen.captures.at(-1)!.meshes[0];
+    while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+    positions.push(root.position.clone());
+  }
+  assert.ok(positions[0].distanceTo(positions[1]) < 2, 'contact must not teleport to caster');
+  assert.ok(positions[1].distanceTo(positions[2]) < .001, 'recovery stays at recipient');
+  scene.dispose();
+});
+
 test('the committed Blender effect is only handled after it really loads', async () => {
   const { renderer, ctx, stats } = surface();
   const scene = createHeroVfxScene(THREE, { loadModel: realAsset });

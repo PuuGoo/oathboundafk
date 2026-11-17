@@ -193,7 +193,8 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
         y: muzzle.y + (chest.y - muzzle.y) * travel
           - (frame.reducedMotion ? 0 : Math.sin(travel * Math.PI) * VFX_STYLE.arcHeight * scale),
       };
-    } else center = muzzle;
+    } else if (sample.phase === 'recovery') center = chest;
+    else center = muzzle;
     const radius = VFX_STYLE.radius * scale * sample.magnitude;
     instance.root.position.set(center.x - frame.width / 2, frame.height / 2 - center.y, layer === 'ground' ? -12 : 0);
     instance.root.scale.set(radius, radius * flatten, radius);
