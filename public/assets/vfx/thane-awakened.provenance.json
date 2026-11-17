@@ -1,0 +1,56 @@
+{
+  "id": "thane-awakened",
+  "heroId": "hero_134_thane",
+  "name": "Thane - The Veiled Wind",
+  "family": "strike",
+  "source": "assets-source/vfx/thane-awakened/thane-awakened.blend",
+  "asset": "thane-awakened.glb",
+  "generator": "tools/build-vfx.py",
+  "blender": "5.3.0",
+  "origin": "Locally generated emissive geometry and keyed object transforms; no downloaded meshes or textures.",
+  "note": "L\u01b0\u1ee1i gi\u00f3 ng\u1ecdc b\u1ea1c, v\u1ec7t kh\u0103n bay v\u00e0 v\u00f2ng xung k\u00edch xanh ng\u1ecdc c\u1ee7a Thane th\u1ee9c t\u1ec9nh.",
+  "rights": "New geometry does not establish rights to referenced character identities/designs.",
+  "coordinates": {
+    "up": "Y",
+    "front": "Z",
+    "origin": "Effect center; hero models anchor feet separately."
+  },
+  "animations": [
+    {
+      "name": "basic",
+      "seconds": 0.4,
+      "channels": 46
+    },
+    {
+      "name": "active",
+      "seconds": 1.15,
+      "channels": 46
+    },
+    {
+      "name": "ultimate",
+      "seconds": 1.65,
+      "channels": 46
+    },
+    {
+      "name": "impact",
+      "seconds": 0.45,
+      "channels": 46
+    }
+  ],
+  "runtimeContract": "Presentation only. The simulation owns cast timing, damage and cooldown; this asset only decides shape over time.",
+  "limitations": [
+    "Procedural stylized study, not a human-approved effect design.",
+    "Opacity, tint intensity and world placement are set at runtime, not baked."
+  ],
+  "metrics": {
+    "glbBytes": 218820,
+    "glbSha256": "80dd5404592065c8cb768ab358b29719cf514f4eb79d6722d28623067055a9b7",
+    "generatorSha256": "a53a5a02512d0cddf2df3c9818fdb26af68fa7b61bb73515c2ae8c75bf22060d",
+    "specSha256": "1f47cf7c04ac21715bbf5de7eca2e41e93d2728efe86d97c01368caeb331708f",
+    "objects": 16,
+    "vertices": 579,
+    "triangles": 950,
+    "meshes": 16,
+    "materials": 3
+  }
+}

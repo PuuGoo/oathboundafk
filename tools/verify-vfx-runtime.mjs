@@ -112,13 +112,37 @@ try {
   await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
   await wait(`!!document.querySelector('[data-testid=pause-modal]')&&(${heroState}).paused===true`);
   await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='hidden'");
+  // Cho HUD/modal ổn định xong rồi mới so pixel; effect age phải đứng yên ngay từ đầu.
+  await sleep(400);
   const clip = await evaluate(`(()=>{const box=${canvas}.getBoundingClientRect();return {x:box.x,y:box.y,width:box.width,height:box.height,scale:1}})()`);
-  const firstPixels = (await call('Page.captureScreenshot', { format: 'png', clip })).data;
-  const firstState = JSON.stringify(await evaluate(vfxState));
-  await sleep(500);
-  result.pauseStable = firstPixels === (await call('Page.captureScreenshot', { format: 'png', clip })).data
-    && firstState === JSON.stringify(await evaluate(vfxState));
-  assert.equal(result.pauseStable, true, 'Paused effect pixels or ages changed');
+  const capture = async () => (await call('Page.captureScreenshot', { format: 'png', clip })).data;
+  // Chụp 5 mốc: tách "simulation tiến" khỏi "một frame render trễ" khi mới pause.
+  const snapshots = [];
+  for (let index = 0; index < 5; index++) {
+    const png = Buffer.from(await capture(), 'base64');
+    fs.writeFileSync(path.join(output, `${prefix}-paused-${index}.png`), png);
+    const body = await evaluate(heroState);
+    snapshots.push({ pixels: hash(png), vfx: JSON.stringify(await evaluate(vfxState)),
+      elapsedMs: body.elapsedMs, paused: body.paused, speed: body.speed });
+    if (index < 4) await sleep(350);
+  }
+  const stableFrom = index => snapshots.slice(index).every(shot =>
+    shot.pixels === snapshots[index].pixels && shot.vfx === snapshots[index].vfx
+    && shot.elapsedMs === snapshots[index].elapsedMs);
+  result.pauseSnapshots = snapshots.map(shot => ({ pixel: shot.pixels.slice(0, 10), elapsedMs: shot.elapsedMs, paused: shot.paused }));
+  result.pauseElapsedSettled = snapshots.every(shot => shot.elapsedMs === snapshots[0].elapsedMs);
+  result.pauseStableFrom = [0, 1, 2, 3, 4].find(index => stableFrom(index)) ?? null;
+  // Pause có hiệu lực ở frame kế tiếp: cho phép tối đa một frame trễ, sau đó phải đứng yên.
+  result.pauseAgesStable = new Set(snapshots.map(shot => shot.vfx)).size === 1;
+  result.pauseSettlesWithinOneFrame = result.pauseStableFrom !== null && result.pauseStableFrom <= 1;
+  result.pausePixelsStable = result.pauseStableFrom !== null
+    && snapshots.length - result.pauseStableFrom >= 3;
+  result.pauseStable = result.pauseAgesStable && result.pausePixelsStable
+    && result.pauseElapsedSettled && result.pauseSettlesWithinOneFrame;
+  assert.equal(result.pauseElapsedSettled, true, 'Simulation clock advanced while paused');
+  assert.equal(result.pauseAgesStable, true, 'Paused effect ages changed');
+  assert.equal(result.pauseSettlesWithinOneFrame, true,
+    `Paused canvas still changing after one settle frame (stable from #${result.pauseStableFrom})`);
   await shot('paused');
   await evaluate("document.querySelector('[data-testid=pause-modal]').style.visibility='visible'");
   await click("document.querySelector('[data-testid=resume-battle-btn]')");
