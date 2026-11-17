@@ -71,11 +71,17 @@ test('an ultimate pulse owns the pulse clip, then the arena returns to its idle 
   assert.equal(sampleArenaPulse(ARENA_CLIP_SECONDS.pulse + 5, 9, false)?.clip, 'idle');
 });
 
-test('reduced motion freezes the idle loop but never the pulse progress', () => {
+test('reduced motion suppresses the expanding pulse and freezes ambience', () => {
   assert.deepEqual(sampleArenaPulse(undefined, 2.25, true), { clip: 'idle', seconds: 0, progress: 0 });
-  const still = sampleArenaPulse(.4, 2.25, true)!;
-  assert.equal(still.clip, 'pulse');
-  assert.equal(still.seconds, .4);
+  for (const age of [0, .4, 1.2]) {
+    assert.deepEqual(sampleArenaPulse(age, 2.25, true), { clip: 'idle', seconds: 0, progress: 0 });
+  }
+});
+
+test('invalid pulse timestamps cannot invent an ultimate flash', () => {
+  for (const age of [NaN, Infinity, -Infinity, -5]) {
+    assert.deepEqual(sampleArenaPulse(age, 2, false), { clip: 'idle', seconds: 2, progress: 0 });
+  }
 });
 
 test('bad clocks never produce NaN geometry', () => {

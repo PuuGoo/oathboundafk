@@ -52,11 +52,12 @@ export interface ArenaPulseSample {
   progress: number;
 }
 
+/** Chỉ phát pulse từ tuổi cast hợp lệ; giảm chuyển động giữ toàn sân ở pose tĩnh. */
 export function sampleArenaPulse(pulseAge: number | undefined, wallClock: number,
   reducedMotion: boolean): ArenaPulseSample {
-  const age = Number.isFinite(pulseAge) ? Math.max(0, pulseAge as number) : 0;
-  if (pulseAge !== undefined && age < ARENA_CLIP_SECONDS.pulse) {
-    return { clip: 'pulse', seconds: age, progress: age / ARENA_CLIP_SECONDS.pulse };
+  if (!reducedMotion && pulseAge !== undefined && Number.isFinite(pulseAge)
+    && pulseAge >= 0 && pulseAge < ARENA_CLIP_SECONDS.pulse) {
+    return { clip: 'pulse', seconds: pulseAge, progress: pulseAge / ARENA_CLIP_SECONDS.pulse };
   }
   const wall = Number.isFinite(wallClock) ? Math.max(0, wallClock) : 0;
   // Hạt và lửa đứng yên khi người dùng giảm chuyển động; không thay đổi màu hay bố cục.
