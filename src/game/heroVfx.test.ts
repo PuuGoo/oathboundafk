@@ -41,6 +41,22 @@ test('only roster heroes with a committed Blender effect resolve, by stable hero
     'each hero needs its own effect file');
 });
 
+test('damage bursts expand outward as they fade while cast scale stays fixed', () => {
+  const base = { ...outcome(), duration: 1 };
+  const sizes = [.05, .3, .6, .95].map(fraction => sample({
+    ...base, age: VFX_STYLE.impactSeconds * fraction,
+  })!.magnitude);
+  for (let index = 1; index < sizes.length; index++) {
+    assert.ok(sizes[index] > sizes[index - 1], 'a hit must keep growing outward');
+  }
+  assert.ok(sizes.at(-1)! < sizes[0] * 2, 'a burst must not swallow the fighters');
+  for (const slot of ['basic', 'active', 'ultimate'] as const) {
+    const early = sample(cast(slot, .05))!.magnitude;
+    const late = sample(cast(slot, .05 + VFX_CLIP_SECONDS[slot] * .8))!.magnitude;
+    assert.equal(early, late, `${slot} cast keeps one authored size`);
+  }
+});
+
 test('damage bursts fade softly and stay handled after fading without a late flash', () => {
   const base = { ...outcome(), duration: 1 };
   let previous = 1;

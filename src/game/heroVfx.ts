@@ -114,8 +114,10 @@ export function sampleHeroVfx(effect: SpriteEffect & { sourceId?: string }, widt
     : effect.age < release ? 'charge' : effect.age < contact ? 'flight' : 'recovery';
   const travel = impact ? 1 : clamp((effect.age - release) / Math.max(.001, contact - release), 0, 1);
   const slot = effect.skillSlot === 'basic' || effect.skillSlot === 'ultimate' ? effect.skillSlot : 'active';
-  const magnitude = impact ? (slot === 'ultimate' || effect.ultimate ? 1.15 : slot === 'basic' ? .7 : .95)
+  const base = impact ? (slot === 'ultimate' || effect.ultimate ? 1.15 : slot === 'basic' ? .7 : .95)
     : slot === 'ultimate' ? 1.55 : slot === 'active' ? 1.1 : .5;
+  // Burst punches out from the contact point, then settles; a flight path keeps one size.
+  const magnitude = impact ? base * (1 + .75 * Math.sin(progress * Math.PI / 2)) : base;
   return {
     id: effect.id, heroId: effect.sourceHeroId, sourceId: definition.sourceId,
     sourceInstanceId: effect.sourceId, support: effect.support, directional: definition.directional, clip, slot, phase,
