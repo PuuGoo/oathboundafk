@@ -34,6 +34,13 @@ export const ARENA_DEFINITIONS: readonly ArenaDefinition[] = Object.freeze([
 
 const byId = new Map(ARENA_DEFINITIONS.map(entry => [entry.id, entry]));
 
+/** Nhịp sáng sân: lên nhanh, giữ ngắn, tan mềm trước khi clip kết thúc. */
+export function arenaPulseOpacity(progress: number): number {
+  if (!Number.isFinite(progress) || progress <= 0 || progress >= 1) return 0;
+  const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
+  return .85 * smooth(progress / .12) * (1 - smooth((progress - .45) / .55));
+}
+
 /** Resolves the authored scene for a stage theme plus the player's arena override. */
 export function resolveArenaScene(theme: string, palette: 'forest' | 'shadow' | 'temple',
   override?: 'auto' | 'enchanted_forest' | 'celestial_temple' | 'shadow_realm'): ArenaDefinition | undefined {

@@ -1,7 +1,7 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type * as Three from 'three';
 import {
-  ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, sampleArenaPulse, type ArenaDefinition, type ArenaSceneId,
+  ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, sampleArenaPulse, arenaPulseOpacity, type ArenaDefinition, type ArenaSceneId,
 } from './arena3d';
 
 /**
@@ -159,6 +159,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       const cloned = list.map(material => {
         const copy = material.clone();
         copy.transparent = true;
+        if (object.name.startsWith('Pulse')) copy.depthWrite = false;
         copy.side = THREE.DoubleSide;
         if (copy instanceof THREE.MeshStandardMaterial) copy.emissiveIntensity *= .8;
         return copy;
@@ -213,7 +214,13 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       // Đặt clip không chạy thì mixer không còn lái transform của nó: phải ẩn tay,
       // nếu không vòng pulse sẽ đứng nguyên ở pose cuối sau khi clip kết thúc.
       const pulseVisible = sample.clip === 'pulse';
-      for (const object of current.pulseObjects) object.visible = pulseVisible;
+      for (const object of current.pulseObjects) {
+        object.visible = pulseVisible;
+        if (object instanceof THREE.Mesh) {
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          for (const material of materials) material.opacity = pulseVisible ? arenaPulseOpacity(sample.progress) : 0;
+        }
+      }
       // Một world-unit trên mỗi pixel: đĩa bán kính 100 phủ đúng radiusX pixel.
       // Góc nghiêng lấy từ ellipse của frame, nên đĩa luôn khớp cả hai trục.
       const wantedElevation = elevationForEllipse(frame.radiusX, frame.radiusY);

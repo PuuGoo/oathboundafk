@@ -157,6 +157,34 @@ test('returning from pulse samples the same idle pose as a repeated paused frame
   scene.dispose();
 });
 
+test('pulse materials fade at both ends without dimming the floor', async () => {
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  const opacities: number[] = [];
+  screen.renderer.render = (root: THREE.Object3D) => {
+    root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      if (object.name.startsWith('Pulse')) {
+        opacities.push(materials[0].opacity);
+        assert.equal(materials[0].depthWrite, false, 'fading light cannot occlude the floor');
+      } else if (object.name.includes('arena_floor')) {
+        assert.equal(materials[0].opacity, 1, 'floor must remain opaque');
+      }
+    });
+  };
+  scene.draw(screen.renderer, screen.ctx, at('temple'), frame());
+  await ready(scene, 'temple');
+  for (const progress of [0, .2, .6, .9, .99]) {
+    scene.draw(screen.renderer, screen.ctx, at('temple'), frame({ pulseAge: progress * ARENA_CLIP_SECONDS.pulse }));
+  }
+  assert.equal(opacities[0], 0);
+  assert.ok(opacities[1] > .7);
+  assert.ok(opacities[2] > opacities[3] && opacities[3] > opacities[4]);
+  assert.ok(opacities[4] < .01, 'last visible frame must approach transparent');
+  scene.dispose();
+});
+
 test('reduced motion keeps the arena visible and static', async () => {
   const screen = surface();
   const scene = createArenaScene(THREE, { loadModel: realArena('forest') });
