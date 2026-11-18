@@ -176,6 +176,55 @@ test('front casts get one additive blur halo and the canvas state is restored', 
   scene.dispose();
 });
 
+test('the floor light under a projectile travels with the spell instead of staying at the caster', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const raine = getHeroVfx('raine')!, belinda = getHeroVfx('belinda')!;
+  const rootOf = (): THREE.Object3D => {
+    let root: THREE.Object3D = screen.captures.at(-1)!.meshes[0];
+    while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+    return root;
+  };
+  const groundAt = async (heroId: string, sourceId: string, age: number): Promise<THREE.Vector3> => {
+    const effect = { ...cast('active', age), sourceHeroId: heroId };
+    scene.draw(screen.renderer, screen.ctx, [effect], 'ground', frame);
+    await settle(scene, sourceId);
+    screen.captures.length = 0;
+    scene.draw(screen.renderer, screen.ctx, [effect], 'ground', frame);
+    return rootOf().position.clone();
+  };
+  // Đạn đang bay: vệt sáng dưới sàn rời chân người niệm và trượt tới mục tiêu.
+  const charge = await groundAt('raine', raine.sourceId, .05);
+  const recovery = await groundAt('raine', raine.sourceId, .9);
+  assert.ok(recovery.x - charge.x > 100, `projectile floor light must travel (${charge.x} -> ${recovery.x})`);
+  // Hào quang: cùng một chỗ trên sân, không bay theo ai.
+  const auraCharge = await groundAt('belinda', belinda.sourceId, .05);
+  const auraRecovery = await groundAt('belinda', belinda.sourceId, .9);
+  assert.ok(Math.abs(auraRecovery.x - auraCharge.x) < 5,
+    `aura floor light must stay with the caster (${auraCharge.x} -> ${auraRecovery.x})`);
+  // Lớp sàn là ánh sáng hắt xuống: mờ hơn lớp trước, và nằm dưới chân (z âm, dẹt theo trục dọc).
+  const effect = { ...cast('active', .6), sourceHeroId: 'raine' };
+  const peak = (): number => {
+    let best = 0;
+    rootOf().traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) best = Math.max(best, material.opacity);
+    });
+    return best;
+  };
+  screen.captures.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [effect], 'ground', frame);
+  // Cùng một instance bị đặt lại cho layer khác, nên phải đo ngay trong khung của từng layer.
+  const ground = { z: rootOf().position.z, scaleX: rootOf().scale.x, scaleY: rootOf().scale.y, peak: peak() };
+  screen.captures.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [effect], 'front', frame);
+  const front = { z: rootOf().position.z, peak: peak() };
+  assert.ok(ground.z < front.z, 'the floor copy sits behind the body layer');
+  assert.ok(ground.scaleY < ground.scaleX * .7, 'the floor copy is flattened onto the ground');
+  assert.ok(ground.peak < front.peak * .75, 'the floor spill must stay subordinate to the cast');
+  scene.dispose();
+});
+
 test('a ground impact keeps dissolving on the floor after its effect ends', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   const effect = hit(.2);

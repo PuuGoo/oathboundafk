@@ -202,7 +202,10 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       center = layer === 'ground' ? endpoint : chest;
       flatten = layer === 'ground' ? .55 : 1;
     } else if (layer === 'ground') {
-      center = origin; flatten = .62;
+      // Vệt sáng dưới sàn đi theo đường đòn: aura đứng tại người niệm, đạn/kiếm trượt theo travel.
+      center = { x: origin.x + (endpoint.x - origin.x) * sample.travel,
+        y: origin.y + (endpoint.y - origin.y) * sample.travel };
+      flatten = .58;
     } else if (sample.phase === 'flight' || sample.phase === 'recovery') {
       // Hào quang đứng tại chỗ, đòn chém nằm ở mục tiêu, đạn mới bay theo cung.
       const travel = sample.travel;
@@ -219,7 +222,9 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     const facing = layer === 'front' && sample.directional && !sample.support && !impact ? toward : 1;
     instance.root.scale.set(radius * facing, radius * flatten, radius);
     instance.root.visible = true;
-    instance.sampleOpacity = Math.max(0, Math.min(1, sample.opacity * sample.brightness));
+    // Lớp sàn chỉ là ánh sáng hắt xuống, nên mờ hơn lớp trước để không thành bản sao thứ hai.
+    const groundLight = layer === 'ground' && !impact && !sample.support ? .6 : 1;
+    instance.sampleOpacity = Math.max(0, Math.min(1, sample.opacity * sample.brightness * groundLight));
     for (const entry of instance.materials) {
       const fade = frame.low && entry.halo ? .5 : 1;
       entry.material.opacity = Math.max(0, Math.min(1, instance.sampleOpacity * entry.factor * fade));
