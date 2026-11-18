@@ -25,6 +25,8 @@ import { groundShadow } from '../game/spriteGroundShadow';
 import { impactShock, IMPACT_SHOCK_SECONDS } from '../game/spriteImpactShock';
 import { castTelegraph } from '../game/spriteCastTelegraph';
 import { vignetteFor, vignetteStops } from '../game/spriteVignette';
+import { hitFlashFilter } from '../game/spriteHitFlash';
+import { dustPuff, MOVE_DUST_INTERVAL } from '../game/spriteMoveDust';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -87,6 +89,11 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     const effects: SpriteEffect[] = [];
     /** Vòng xung kích đang chạy tại điểm chạm, tính bằng đồng hồ trình diễn. */
     const shocks: Array<{ id: number; at: number; strength: number; x: number; y: number; tint: string }> = [];
+    /** Bụi cuốn dưới chân khi chạy; `seed` cố định để hạt bay cùng hướng mỗi lần. */
+    let dustSeed = 0;
+    const dust: Array<{ at: number; seed: number; x: number; y: number; facing: number }> = [];
+    /** Mốc đồng hồ của hạt bụi gần nhất theo từng instance, để không xả mỗi khung. */
+    const lastDustAt = new Map<string, number>();
     const feed: UltimateAnnouncement[] = [];
     const publishAnnouncements = () => setAnnouncements(feed.map(entry => ({ ...entry })));
     let impactShake = 0, visualClock = 0;
@@ -294,6 +301,14 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const scale = getSpriteBattleScale(width, height);
       const hero = getHeroById(unit.heroId), spec = getOathboundSprite(hero.unitId);
       if (!overlayOnly) {
+      // Bụi cuốn: chỉ khi thật sự đang chạy, và cách nhau MOVE_DUST_INTERVAL để không thành vệt đặc.
+      if (unit.isAlive && unit.lastActionType === 'move' && !reduceMotion()) {
+        const previous = lastDustAt.get(unit.instanceId);
+        if (previous === undefined || visualClock - previous >= MOVE_DUST_INTERVAL) {
+          lastDustAt.set(unit.instanceId, visualClock);
+          if (dust.length < 28) dust.push({ at: visualClock, seed: dustSeed++, x: unit.x, y: unit.y, facing: unit.facing });
+        }
+      }
       // Vòng niệm dưới chân: đầy tới mốc phóng chiêu thật trong timeline, rồi tan nhanh.
       const cast = unit.currentCast;
       if (cast && unit.isAlive && !reduceMotion()) {
@@ -396,6 +411,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         lastUltimate = undefined;
         arenaRevealId = undefined; arenaRevealAt = 0;
         active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; shocks.length = 0;
+        dust.length = 0; lastDustAt.clear(); dustSeed = 0;
         accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }
@@ -450,6 +466,25 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
           ctx.beginPath();
           ctx.ellipse(at.x, at.y, ring.radius, ring.radius * ring.flatten, 0, 0, Math.PI * 2);
           ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // Bụi cuốn dưới chân: vẽ cùng lớp sàn, trước tướng nên không che thân.
+      if (dust.length) {
+        const stageScale = getSpriteBattleScale(width, height);
+        const ground = arenaGroundHex();
+        for (let index = dust.length - 1; index >= 0; index--) {
+          const puff = dust[index];
+          const age = visualClock - puff.at;
+          const state = dustPuff(age, puff.seed, stageScale, ground, puff.facing);
+          if (!state.alive) { dust.splice(index, 1); continue; }
+          const at = projectSpritePosition(puff.x, puff.y, width, height);
+          ctx.save();
+          ctx.fillStyle = state.color;
+          ctx.beginPath();
+          ctx.ellipse(at.x + state.dx, at.y + state.dy + 1.5 * stageScale,
+            state.radius, state.radius * .5, 0, 0, Math.PI * 2);
+          ctx.fill();
           ctx.restore();
         }
       }
