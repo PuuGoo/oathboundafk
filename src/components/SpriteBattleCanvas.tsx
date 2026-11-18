@@ -24,6 +24,7 @@ import { arenaLighting, arenaPulseOpacity, resolveArenaScene, ARENA_CLIP_SECONDS
 import { groundShadow } from '../game/spriteGroundShadow';
 import { impactShock, IMPACT_SHOCK_SECONDS } from '../game/spriteImpactShock';
 import { castTelegraph } from '../game/spriteCastTelegraph';
+import { vignetteFor, vignetteStops } from '../game/spriteVignette';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -244,6 +245,18 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         ctx.beginPath(); ctx.moveTo(width / 2 + Math.cos(angle) * width * 0.39, height * 0.57 + Math.sin(angle) * height * 0.18);
         ctx.lineTo(width / 2 + Math.cos(angle) * width * 0.59, height * 0.57 + Math.sin(angle) * height * 0.27); ctx.stroke();
       }
+      /** Vignette màu sàn: hạ sáng bốn góc để mắt bám vào hai hàng tướng; giữa khung không đổi pixel. */
+      const drawVignette = () => {
+        const vignette = vignetteFor(width, height, arenaGroundHex(), currentPulseFlash());
+        const radius = Math.hypot(width, height) * .5;
+        const shade = ctx.createRadialGradient(width * vignette.centerX, height * vignette.centerY,
+          radius * vignette.inner, width * vignette.centerX, height * vignette.centerY, radius * vignette.outer);
+        for (const stop of vignetteStops(vignette)) shade.addColorStop(stop.at, stop.color);
+        ctx.save();
+        ctx.fillStyle = shade;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      };
       // Lớp sân Blender vẽ đè lên ellipse nền; asset tải xong mới hiện, lỗi thì giữ nền phẳng.
       if (scene) {
         // Vòng sáng sân chỉ chạy trong 1,65 s kể từ lần tung tuyệt kỹ gần nhất.
@@ -265,6 +278,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       } else {
         canvas.dataset.arena3d = JSON.stringify({ scene: null });
       }
+      // Đặt sau lớp sân 3D để bóng góc phủ cả nền đá lẫn trời, nhưng vẫn dưới tướng và HUD.
+      drawVignette();
     };
     const drawUnit = (unit: BattleUnitRuntime, dt: number, overlayOnly = false) => {
       const actor = actors.get(unit.instanceId)!;
