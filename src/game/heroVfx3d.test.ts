@@ -210,6 +210,10 @@ test('a flying projectile drags two fading ghosts, and they vanish when it lands
   screen.captures.length = 0;
   scene.draw(screen.renderer, screen.ctx, [flight], 'front', { ...frame, reducedMotion: true });
   assert.equal(copies().length, 1, 'reduced motion keeps the single authored effect');
+  // LOW preset: vệt là trang trí, cắt để đỡ hai bản sao mỗi viên đạn.
+  screen.captures.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [flight], 'front', { ...frame, low: true });
+  assert.equal(copies().length, 1, 'the LOW preset drops the decorative trail');
   scene.dispose();
 });
 

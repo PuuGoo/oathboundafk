@@ -323,8 +323,9 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
         live.add(sample.id);
         handled.add(sample.id);
         // Đạn đang bay để lại hai vệt mờ phía sau, cùng clip nhưng lùi trên đường bay.
+        // LOW preset bỏ vệt: đây là hiệu ứng trang trí, không đáng hai bản sao mỗi viên đạn.
         if (layer === 'front' && sample.travelMode === 'projectile'
-          && sample.phase === 'flight' && !frame.reducedMotion) {
+          && sample.phase === 'flight' && !frame.reducedMotion && !frame.low) {
           trailFor(record, sample, clip).forEach((ghost, index) => {
             const behind = sample.travel - TRAIL_STEP * (index + 1);
             if (behind <= 0) { ghost.root.visible = false; return; }
