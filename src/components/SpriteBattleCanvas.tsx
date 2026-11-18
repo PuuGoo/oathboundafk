@@ -106,6 +106,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       pixelRatio = dpr;
       canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Buffer 3D theo độ phân giải thật của canvas; LOW giữ 1× để máy yếu không tô lại ở 2×.
+      heroes3d.resize(width, height, live.current.graphicsPreset === 'LOW' ? 1 : dpr);
     };
     const ro = new ResizeObserver(resize); ro.observe(canvas); resize();
     const tap = (event: PointerEvent) => {

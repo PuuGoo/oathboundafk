@@ -95,6 +95,8 @@ export interface HeroRenderBackend {
   /** Draws the Blender arena behind the fighters; false when no scene is ready. */
   drawArena?(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean;
   arenaStatus?(id: ArenaSceneId): string;
+  /** Matches the shared buffer to the canvas resolution; the crop aspect stays 384:448. */
+  resize?(width: number, height: number, pixelRatio: number): void;
 }
 
 export interface HeroModelDiagnostic { heroId: string; status: HeroModelStatus }
@@ -161,6 +163,13 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
     import('three'), import('three/addons/loaders/GLTFLoader.js'), import('three/addons/utils/SkeletonUtils.js'),
   ]);
   const renderer = dependencies?.renderer ?? new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: false });
+  /**
+   * Một buffer duy nhất cho thân/tướng/hiệu ứng/sân. Tỷ lệ 384:448 là khung của thân nhân vật
+   * nên phải giữ nguyên; `resize` chỉ tăng độ phân giải theo canvas để hình không bị nhoè.
+   */
+  const BUFFER_ASPECT = 448 / 384;
+  const BUFFER_MIN_WIDTH = 384, BUFFER_MAX_WIDTH = 1024;
+  let bufferWidth = 384;
   renderer.setSize(384, 448); renderer.setPixelRatio(1);
   renderer.setClearColor(0x000000, 0); renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
@@ -290,6 +299,16 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       return definition ? vfx.status(definition.sourceId) : 'disabled';
     },
     arenaStatus: (id: ArenaSceneId): string => disposed ? 'failed' : arena.status(id),
+    /** Khớp độ phân giải buffer với canvas thật (CSS × DPR), có trần để máy yếu không vỡ RAM GPU. */
+    resize(width: number, _height: number, pixelRatio: number): void {
+      if (disposed) return;
+      const ratio = Number.isFinite(pixelRatio) ? Math.max(1, Math.min(2, pixelRatio)) : 1;
+      const wanted = Math.round(Math.max(BUFFER_MIN_WIDTH, Math.min(BUFFER_MAX_WIDTH,
+        (Number.isFinite(width) ? Math.max(1, width) : 0) * ratio)));
+      if (wanted === bufferWidth) return;
+      bufferWidth = wanted;
+      renderer.setSize(wanted, Math.round(wanted * BUFFER_ASPECT));
+    },
     drawArena(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean {
       if (disposed) return false;
       // Đổi màu đèn nhân vật ngay khi biết sân, kể cả lúc asset sân còn đang tải.
@@ -403,6 +422,12 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
   let backend: HeroRenderBackend | undefined;
   const renderedIds = new Set<string>();
   const requestedHeroes = new Set<string>();
+  /** Kích thước canvas biết được trước khi backend tải xong; áp ngay khi backend sẵn sàng. */
+  let pendingSize: [number, number, number] | undefined;
+  const applyPendingSize = (target: HeroRenderBackend): void => {
+    if (!pendingSize || !target.resize) return;
+    try { target.resize(...pendingSize); } catch { /* Canvas2D fallback vẫn vẽ được. */ }
+  };
   const release = () => {
     const old = backend; backend = undefined;
     try { old?.dispose(); } catch { /* Canvas2D fallback remains available. */ }
@@ -451,6 +476,7 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
         Promise.resolve().then(load).then(loaded => {
           if (state === 'disposed') { loaded.dispose(); return; }
           backend = loaded; state = 'ready';
+          applyPendingSize(loaded);
         }).catch(() => { if (state !== 'disposed') { state = 'failed'; release(); } });
       }
       if (!backend?.drawArena) return false;
@@ -458,6 +484,11 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
       catch { state = 'failed'; release(); return false; }
     },
     beginFrame,
+    /** Canvas báo kích thước thật; buffer 3D đi theo để hình không bị nhoè khi phóng to. */
+    resize(width: number, height: number, pixelRatio: number): void {
+      pendingSize = [width, height, pixelRatio];
+      try { backend?.resize?.(width, height, pixelRatio); } catch { /* Canvas2D fallback vẫn vẽ được. */ }
+    },
     diagnostics(): Hero3DDiagnostic { return { status: state, heroes: modelStatuses(), renderedIds: [...renderedIds] }; },
     draw(...args: Parameters<HeroRenderBackend['draw']>): boolean {
       const unit = args[1];
@@ -468,6 +499,7 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
         Promise.resolve().then(load).then(loaded => {
           if (state === 'disposed') { loaded.dispose(); return; }
           backend = loaded; state = 'ready';
+          applyPendingSize(loaded);
         }).catch(() => { if (state !== 'disposed') { state = 'failed'; release(); } });
       }
       if (!backend) return false;

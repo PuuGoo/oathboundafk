@@ -188,6 +188,38 @@ test('actual mixers keep repeated identity skeletons independent and sample comp
   assert.deepEqual(model.disposals, { geometry: 1, material: 1, texture: 1, skeleton: 1 });
 });
 
+test('the shared 3D buffer follows the canvas resolution and keeps the 384:448 crop', async () => {
+  const screen = surface();
+  const backend = await loadHeroBackend({ renderer: screen.renderer, loadModel: async () => asset() });
+  assert.deepEqual(screen.sizes.at(-1), [384, 448], 'the authored default buffer');
+  backend.resize!(480, 680, 2);
+  assert.deepEqual(screen.sizes.at(-1), [960, 1120], 'buffer follows CSS size x DPR');
+  const allocations = screen.sizes.length;
+  backend.resize!(480, 680, 2);
+  assert.equal(screen.sizes.length, allocations, 'the same size must not reallocate the buffer');
+  backend.resize!(5000, 5000, 2);
+  const capped = screen.sizes.at(-1)!;
+  assert.equal(capped[0], 1024, 'the buffer is capped so weak GPUs keep their memory');
+  assert.ok(Math.abs(capped[1] / capped[0] - 448 / 384) < 1e-3, 'the body crop aspect must not change');
+  backend.resize!(200, 200, 1);
+  assert.deepEqual(screen.sizes.at(-1), [384, 448], 'tiny canvases fall back to the authored minimum');
+  backend.dispose();
+});
+
+test('a canvas size reported before the backend exists is applied once it loads', async () => {
+  let resolve!: (backend: HeroRenderBackend) => void;
+  const sizes: number[][] = [];
+  const view = createHero3D(() => new Promise(r => { resolve = r; }));
+  view.resize(480, 680, 2);
+  view.draw(drawContext, unit(), actor(), 0, false, 0, 0, 1);
+  await Promise.resolve();
+  resolve({ draw: () => true, reset() {}, dispose() {},
+    resize: (width, height, ratio) => sizes.push([width, height, ratio]) });
+  await flush();
+  assert.deepEqual(sizes, [[480, 680, 2]], 'the pending canvas size must reach the backend');
+  view.dispose();
+});
+
 test('the arena theme recolours the hero lights before its asset finishes loading', async () => {
   const screen = surface();
   const backend = await loadHeroBackend({ renderer: screen.renderer,
