@@ -234,6 +234,46 @@ test('the pulse ring borrows the casting hero colour, then hands the palette bac
   } finally { scene.dispose(); }
 });
 
+test('braziers get a halo anchored to the real GLB flame positions', async () => {
+  const definition = at('temple');
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  let glow: THREE.Points | undefined;
+  const braziers: THREE.Vector3[] = [];
+  screen.renderer.render = (root: THREE.Object3D) => {
+    glow = undefined;
+    root.updateMatrixWorld(true);
+    root.traverse(object => {
+      if (object instanceof THREE.Points && object.name === 'Arena_brazier_glow') glow = object;
+      if (object instanceof THREE.Mesh && /^Brazier/.test(object.name)) {
+        braziers.push(object.getWorldPosition(new THREE.Vector3()));
+      }
+    });
+  };
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reveal: 1 }));
+  await ready(scene, 'temple');
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reveal: 1 }));
+  assert.ok(glow, 'the arena must add one brazier halo layer');
+  const positions = glow.geometry.getAttribute('position') as THREE.BufferAttribute;
+  assert.equal(positions.count, braziers.length, 'one halo point per authored brazier');
+  assert.ok(braziers.length >= 5, `expected five braziers, found ${braziers.length}`);
+  // Mỗi điểm phải nằm ngay trên miệng đài lửa của nó, không phải toạ độ hardcode.
+  for (let index = 0; index < positions.count; index++) {
+    const anchor = braziers[index];
+    assert.ok(Math.abs(positions.getX(index) - anchor.x) < 1e-3, `halo ${index} x offset`);
+    assert.ok(Math.abs(positions.getZ(index) - anchor.z) < 1e-3, `halo ${index} z offset`);
+    assert.ok(positions.getY(index) > anchor.y && positions.getY(index) - anchor.y < 6,
+      `halo ${index} must float just above the bowl`);
+  }
+  const material = glow.material as THREE.PointsMaterial;
+  assert.equal(material.blending, THREE.AdditiveBlending, 'the halo adds light, it does not veil the fire');
+  assert.equal(material.depthWrite, false);
+  let released = 0;
+  glow.geometry.addEventListener('dispose', () => released++);
+  scene.dispose();
+  assert.equal(released, 1, 'the halo geometry is released with the arena');
+});
+
 test('each arena draws one weather field that moves on the presentation clock', async () => {
   const definition = at('temple');
   const screen = surface();
@@ -241,7 +281,7 @@ test('each arena draws one weather field that moves on the presentation clock', 
   let points: THREE.Points[] = [];
   screen.renderer.render = (root: THREE.Object3D) => {
     points = [];
-    root.traverse(object => { if (object instanceof THREE.Points) points.push(object); });
+    root.traverse(object => { if (object instanceof THREE.Points && object.name === 'Arena_weather') points.push(object); });
   };
   scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 0 }));
   await ready(scene, 'temple');

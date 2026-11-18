@@ -1,7 +1,7 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type * as Three from 'three';
 import {
-  arenaFogDepth, arenaLighting, arenaWeather, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
+  arenaFogDepth, arenaLighting, arenaWeather, brazierGlow, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
   sampleArenaPulse, arenaPulseOpacity, type ArenaDefinition, type ArenaSceneId, type ArenaWeather,
 } from './arena3d';
 
@@ -53,6 +53,8 @@ type Active = {
   shimmer: Array<{ material: Three.MeshStandardMaterial; base: number }>;
   /** Thời tiết của sân: một `Points` duy nhất, vị trí tính lại theo đồng hồ trình diễn. */
   weather: { points: Three.Points; geometry: Three.BufferGeometry; material: Three.PointsMaterial; spec: ArenaWeather };
+  /** Quầng đài lửa: một `Points` dựng từ chính vị trí mesh `Brazier*` trong GLB. */
+  glow: { points: Three.Points; geometry: Three.BufferGeometry; material: Three.PointsMaterial };
 };
 
 /** Mức pha với màu chiêu: đủ để đọc ra tướng nào vừa tung, chưa tới mức mất bảng màu sân. */
@@ -174,6 +176,8 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
     active.mixer.stopAllAction(); active.mixer.uncacheRoot(active.root);
     active.weather.geometry.dispose(); active.weather.material.dispose();
     scene.remove(active.weather.points);
+    active.glow.geometry.dispose(); active.glow.material.dispose();
+    scene.remove(active.glow.points);
     active.root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
       const list = Array.isArray(object.material) ? object.material : [object.material];
@@ -255,8 +259,28 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
     const points = new THREE.Points(geometry, material);
     points.name = 'Arena_weather'; points.frustumCulled = false;
     scene.add(points);
+    // Quầng đài lửa: đọc toạ độ world của chính mesh `Brazier*` trong GLB, không hardcode.
+    const flamePoints: number[] = [];
+    const brazierAnchor = new THREE.Vector3();
+    root.updateMatrixWorld(true);
+    root.traverse(object => {
+      if (!(object instanceof THREE.Mesh) || !/^Brazier/.test(object.name)) return;
+      object.getWorldPosition(brazierAnchor);
+      flamePoints.push(brazierAnchor.x, brazierAnchor.y + 3.5, brazierAnchor.z);
+    });
+    const glowSpec = brazierGlow(arenaLighting(id).rim);
+    const glowGeometry = new THREE.BufferGeometry();
+    glowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(flamePoints, 3));
+    const glowMaterial = new THREE.PointsMaterial({ color: glowSpec.color, size: glowSpec.size,
+      sizeAttenuation: false, transparent: true, opacity: glowSpec.opacity,
+      depthWrite: false, blending: THREE.AdditiveBlending });
+    const glowPoints = new THREE.Points(glowGeometry, glowMaterial);
+    glowPoints.name = 'Arena_brazier_glow';
+    glowPoints.frustumCulled = false;
+    scene.add(glowPoints);
     active = { id, root, mixer, actions, pulseObjects, pulseTintable, revealMaterials, shimmer,
-      weather: { points, geometry, material, spec } };
+      weather: { points, geometry, material, spec },
+      glow: { points: glowPoints, geometry: glowGeometry, material: glowMaterial } };
     return active;
   };
 
@@ -306,6 +330,9 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       // Mưa/bụi bắt sáng của cú tung; LOW cắt mạnh lớp hạt để đỡ fill rate.
       current.weather.material.opacity = current.weather.spec.opacity * revealEased
         * (frame.low ? .55 : 1) * (1 + .8 * flash);
+      // Đài lửa bắt nhịp thở: quầng sáng lệch pha chậm hơn rune để sân không nhấp nháy đồng loạt.
+      current.glow.material.opacity = brazierGlow(arenaLighting(current.id).rim).opacity
+        * revealEased * (1 + .22 * (frame.reducedMotion ? 0 : Math.sin(wall * 1.7)));
       for (const [name, action] of current.actions) {
         const wanted = name === sample.clip;
         action.enabled = wanted;

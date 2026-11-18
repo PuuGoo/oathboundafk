@@ -76,6 +76,21 @@ export function arenaFogDepth(id: ArenaSceneId): ArenaFogDepth {
   return Object.freeze({ near: spec.near, far: spec.far });
 }
 
+/**
+ * Quầng sáng quanh đài lửa. Hình dạng lấy từ chính GLB (mesh tên `Brazier*`) nên
+ * không hardcode toạ độ; đây là giả-bloom chạy một draw call cho cả sân.
+ */
+export interface BrazierGlow {
+  /** Kích thước điểm (pixel buffer, camera ortho nên không giảm theo khoảng cách). */
+  readonly size: number;
+  readonly color: number;
+  readonly opacity: number;
+}
+
+export function brazierGlow(accentHex: number): BrazierGlow {
+  return Object.freeze({ size: 30, color: accentHex & 0xffffff, opacity: .34 });
+}
+
 /** Thời tiết riêng của từng sân: bụi, bào tử, mưa hay tàn lửa trôi trong khung. */
 export interface ArenaWeather {
   readonly count: number;

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  arenaLighting, arenaWeather, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
+  arenaLighting, arenaWeather, brazierGlow, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
   resolveArenaScene, sampleArenaPulse,
 } from './arena3d';
 import authoredArenas from '../../tools/arena-themes.json';
@@ -51,6 +51,18 @@ test('every arena carries its own weather field that moves and stays inside the 
   }
   assert.equal(arenaWeather('storm').direction, -1, 'rain falls');
   assert.equal(arenaWeather('obsidian').direction, 1, 'embers rise');
+});
+
+test('the brazier glow borrows the theme rim colour and stays a soft accent', () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const rim = arenaLighting(definition.id).rim;
+    const glow = brazierGlow(rim);
+    assert.equal(glow.color, rim & 0xffffff, `${definition.id}: the glow takes the rim colour`);
+    assert.ok(glow.size > 10 && glow.size < 60, `${definition.id}: the halo is a soft disc, not a blob`);
+    assert.ok(glow.opacity > .1 && glow.opacity < .5, `${definition.id}: the glow must not wash out the fire`);
+  }
+  // Màu ngoài 24 bit bị cắt, không tràn sang kênh khác.
+  assert.equal(brazierGlow(0xff00ff00).color, 0x00ff00);
 });
 
 test('every stage theme resolves a distinct authored arena', () => {
