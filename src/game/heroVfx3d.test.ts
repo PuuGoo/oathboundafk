@@ -176,6 +176,43 @@ test('front casts get one additive blur halo and the canvas state is restored', 
   scene.dispose();
 });
 
+test('a flying projectile drags two fading ghosts, and they vanish when it lands', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const raine = getHeroVfx('raine')!;
+  const flight = { ...cast('active', .5), sourceHeroId: 'raine' };
+  /** Root của từng bản sao trong khung vừa vẽ, kèm độ mờ lớn nhất. */
+  const copies = (): Array<{ root: THREE.Object3D; opacity: number }> => {
+    const map = new Map<THREE.Object3D, number>();
+    for (const mesh of screen.captures.at(-1)!.meshes) {
+      let root: THREE.Object3D = mesh;
+      while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      map.set(root, Math.max(map.get(root) ?? 0, Math.max(...materials.map(entry => entry.opacity))));
+    }
+    return [...map].map(([root, opacity]) => ({ root, opacity }));
+  };
+  scene.draw(screen.renderer, screen.ctx, [flight], 'front', frame);
+  await settle(scene, raine.sourceId);
+  screen.captures.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [flight], 'front', frame);
+  const drawn = copies().sort((a, b) => a.root.position.x - b.root.position.x);
+  assert.equal(drawn.length, 3, 'one projectile plus two trail ghosts');
+  // Nguồn ở x=250, mục tiêu x=650: vệt phải nằm sau viên đạn, xa dần theo thứ tự.
+  assert.ok(drawn[0].root.position.x < drawn[1].root.position.x, 'ghosts trail behind the shot');
+  assert.ok(drawn[1].root.position.x < drawn[2].root.position.x, 'the second ghost is further back');
+  assert.ok(drawn[2].opacity > drawn[1].opacity && drawn[1].opacity > drawn[0].opacity,
+    'trail ghosts must fade the further back they sit');
+  // Hết bay: vệt không được ở lại một mình.
+  const frames = screen.captures.length;
+  for (let pass = 0; pass < 4; pass++) scene.draw(screen.renderer, screen.ctx, [], 'front', frame);
+  assert.equal(screen.captures.length, frames, 'no ghost is left drawing after the shot lands');
+  // Reduced motion: không vệt.
+  screen.captures.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [flight], 'front', { ...frame, reducedMotion: true });
+  assert.equal(copies().length, 1, 'reduced motion keeps the single authored effect');
+  scene.dispose();
+});
+
 test('the floor light under a projectile travels with the spell instead of staying at the caster', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   const raine = getHeroVfx('raine')!, belinda = getHeroVfx('belinda')!;

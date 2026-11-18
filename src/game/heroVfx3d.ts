@@ -28,6 +28,11 @@ const PRUNE_PASSES = 90;
 const MAX_INSTANCES = 16;
 /** Đòn chạm giữ lại trên sàn bao lâu sau khi effect kết thúc (giây trình diễn). */
 const IMPACT_GHOST_SECONDS = .55;
+/** Vệt mờ phía sau viên đạn đang bay: độ trễ theo travel, độ mờ và độ lớn của từng vệt. */
+const TRAIL_COUNT = 2;
+const TRAIL_STEP = .055;
+const TRAIL_OPACITY = [.34, .17] as const;
+const TRAIL_SCALE = [.9, .8] as const;
 
 type Namespace = typeof import('three');
 type Record_ = {
@@ -82,6 +87,8 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     sourceId: definition.sourceId, url: definition.url, state: 'idle', version: 0,
   }]));
   const instances = new Map<number, Instance>();
+  /** Vệt bay, tách khỏi pool chính để chúng không đẩy hiệu ứng thật ra khỏi ngân sách 16. */
+  const trails = new Map<number, Instance[]>();
   let disposed = false;
   let pass = 0;
   const queue: Record_[] = [];
@@ -132,18 +139,16 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
   const dropInstance = (id: number): void => {
     const instance = instances.get(id);
     if (!instance) return;
+    dropTrails(id);
     instance.mixer.stopAllAction(); instance.mixer.uncacheRoot(instance.root);
     instance.materials.forEach(entry => entry.material.dispose());
     scene.remove(instance.root);
     instances.delete(id);
   };
 
-  const createInstance = (record: Record_, sample: HeroVfxSample): Instance | undefined => {
-    if (!record.template || !record.clips) return;
-    if (instances.size >= MAX_INSTANCES) {
-      const oldest = [...instances].sort((a, b) => a[1].lastPass - b[1].lastPass)[0];
-      dropInstance(oldest[0]);
-    }
+  /** Bản sao của một template (geometry dùng lại, material riêng); chưa gắn vào pool nào. */
+  const buildClone = (record: Record_): { root: Three.Object3D; materials: Instance['materials'] } | undefined => {
+    if (!record.template) return;
     const root = record.template.clone(true);
     root.visible = true;
     const materials: Instance['materials'] = [];
@@ -176,12 +181,57 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       object.material = Array.isArray(object.material) ? cloned : cloned[0];
     });
     scene.add(root);
+    return { root, materials };
+  };
+
+  const createInstance = (record: Record_, sample: HeroVfxSample): Instance | undefined => {
+    if (!record.template || !record.clips) return;
+    if (instances.size >= MAX_INSTANCES) {
+      const oldest = [...instances].sort((a, b) => a[1].lastPass - b[1].lastPass)[0];
+      dropInstance(oldest[0]);
+    }
+    const built = buildClone(record);
+    if (!built) return;
     const instance: Instance = {
-      sourceId: sample.sourceId, root, mixer: new THREE.AnimationMixer(root), materials, lastPass: pass,
+      sourceId: sample.sourceId, root: built.root, mixer: new THREE.AnimationMixer(built.root),
+      materials: built.materials, lastPass: pass,
       sampleOpacity: 0, layer: 'front',
     };
     instances.set(sample.id, instance);
     return instance;
+  };
+
+  const dropTrails = (id: number): void => {
+    const list = trails.get(id);
+    if (!list) return;
+    for (const ghost of list) {
+      ghost.mixer.stopAllAction(); ghost.mixer.uncacheRoot(ghost.root);
+      ghost.materials.forEach(entry => entry.material.dispose());
+      scene.remove(ghost.root);
+    }
+    trails.delete(id);
+  };
+
+  /** Vệt của một viên đạn: cùng clip, cùng thời điểm, chỉ lùi lại trên đường bay. */
+  const trailFor = (record: Record_, sample: HeroVfxSample, clip: Three.AnimationClip): Instance[] => {
+    const existing = trails.get(sample.id);
+    if (existing && existing.length === TRAIL_COUNT && existing[0].sourceId === sample.sourceId) return existing;
+    if (existing) dropTrails(sample.id);
+    const list: Instance[] = [];
+    for (let index = 0; index < TRAIL_COUNT; index++) {
+      const built = buildClone(record);
+      if (!built) break;
+      const ghost: Instance = { sourceId: sample.sourceId, root: built.root,
+        mixer: new THREE.AnimationMixer(built.root), materials: built.materials, lastPass: pass,
+        sampleOpacity: 0, layer: 'front', clipName: sample.clip };
+      ghost.action = ghost.mixer.clipAction(clip);
+      ghost.action.setLoop(THREE.LoopOnce, 1);
+      ghost.action.clampWhenFinished = true;
+      ghost.action.reset().play();
+      list.push(ghost);
+    }
+    trails.set(sample.id, list);
+    return list;
   };
 
   const place = (instance: Instance, sample: HeroVfxSample, layer: 'ground' | 'front', frame: HeroVfxFrame): void => {
@@ -272,7 +322,23 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
         drawn.push(instance);
         live.add(sample.id);
         handled.add(sample.id);
+        // Đạn đang bay để lại hai vệt mờ phía sau, cùng clip nhưng lùi trên đường bay.
+        if (layer === 'front' && sample.travelMode === 'projectile'
+          && sample.phase === 'flight' && !frame.reducedMotion) {
+          trailFor(record, sample, clip).forEach((ghost, index) => {
+            const behind = sample.travel - TRAIL_STEP * (index + 1);
+            if (behind <= 0) { ghost.root.visible = false; return; }
+            ghost.mixer.setTime(Math.max(0, sample.progress) * clip.duration);
+            ghost.lastPass = pass;
+            place(ghost, { ...sample, travel: behind,
+              opacity: sample.opacity * TRAIL_OPACITY[index],
+              magnitude: sample.magnitude * TRAIL_SCALE[index] }, layer, frame);
+            drawn.push(ghost);
+          });
+        }
       }
+      // Đạn chạm/ngừng bay: vệt không được ở lại một mình.
+      for (const [id, list] of trails) if (list.every(ghost => pass - ghost.lastPass > TRAIL_COUNT)) dropTrails(id);
       // Đòn chạm tan dần trên sàn: effect đã hết nhưng instance còn giữ pose cuối thêm ~0,55 s,
       // nên vết lửa không biến mất đột ngột. Dùng đồng hồ trình diễn để pause/×2 áp đúng.
       const clock = frame.clock;
@@ -324,6 +390,7 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     },
     /** Giải phóng cache khi đổi trận; load cũ về trễ không được chiếm cache mới. */
     reset(): void {
+      for (const id of [...trails.keys()]) dropTrails(id);
       for (const id of [...instances.keys()]) dropInstance(id);
       queue.length = 0;
       for (const record of records.values()) {
@@ -337,6 +404,7 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       if (disposed) return;
       disposed = true;
       queue.length = 0;
+      for (const id of [...trails.keys()]) dropTrails(id);
       for (const id of [...instances.keys()]) dropInstance(id);
       for (const record of records.values()) {
         if (record.template) { disposeObject(THREE, record.template); record.template = undefined; }
