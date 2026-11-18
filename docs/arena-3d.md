@@ -68,6 +68,7 @@ Sàn Canvas2D là ellipse `width*0.66 × height*0.31`, tỷ lệ **0,665**. Came
 - `verify-arena-models`: 5/5 GLB qua, 130 pose lấy mẫu, 3.855.876 byte tổng.
 - Trong trận thật (Chrome production preview, save giả): stage 1 `temple`, stage 3 `shadow`, stage 4/5 `forest`, stage 6/7 `storm`, stage 9 `obsidian` — mỗi theme đều `drawn:true`, pause giữ pixel, ×2 vẫn vẽ, 0 exception. Lỗi 404 duy nhất là `/favicon.ico`.
 - Lượt chạy lại trên bản dựng mới nhất (buffer theo canvas + flash sân + vệt đạn): stage 1 với `--verify-fog` đọc đúng `fogNear 400 / fogFar 640 / fogColor [0.553, 0.447, 0.314]` từ lệnh WebGL đang vẽ; stage 9 `obsidian` cũng `drawn:true`, pause ổn định, ×2 vẫn vẽ, 0 exception.
+- Thời tiết được kiểm trên GPU thật qua `canvas.dataset.arena3d.weather` (số hạt của lớp đang vẽ), chạy cả 5 theme trong một lượt: stage 1 `temple` 64, stage 3 `shadow` 56, stage 5 `forest` 72, stage 7 `storm` 96, stage 9 `obsidian` 60 hạt; mỗi lượt `drawn:true`, pause ổn định, ×2 vẫn vẽ, 0 exception. `verify-arena-runtime.mjs` fail nếu `weather` không > 0, nên con số này không thể "trôi" mà không ai biết.
 - 331/331 test, `tsc --noEmit` sạch, `vite build` đạt.
 
 Giới hạn: chưa có duyệt mỹ thuật bằng mắt (công cụ xem ảnh trả 403 ở phiên này); chưa đo FPS/GPU, nên chưa biết buffer 1024 px ảnh hưởng bao nhiêu tới máy yếu; chưa kiểm mọi stage của campaign, chỉ một stage đại diện cho mỗi theme.

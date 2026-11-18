@@ -215,7 +215,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         // Nhịp hiện dần chỉ bắt đầu từ khung vẽ được đầu tiên, không tính lúc asset còn đang tải.
         if (drawn && arenaRevealId !== scene.id) { arenaRevealId = scene.id; arenaRevealAt = visualClock; }
         canvas.dataset.arena3d = JSON.stringify({ scene: scene.id, drawn,
-          status: heroes3d.arenaStatus(scene.id), pulse: pulseAge !== undefined });
+          status: heroes3d.arenaStatus(scene.id), pulse: pulseAge !== undefined,
+          weather: heroes3d.arenaWeatherCount() });
       } else {
         canvas.dataset.arena3d = JSON.stringify({ scene: null });
       }

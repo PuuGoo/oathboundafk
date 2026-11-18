@@ -11,7 +11,7 @@ import type { SpriteEffect } from './spriteBattleEffects';
 import { readFileSync } from 'node:fs';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getHeroModel } from './heroModels';
-import { arenaLighting, ARENA_DEFINITIONS } from './arena3d';
+import { arenaLighting, arenaWeather, ARENA_DEFINITIONS } from './arena3d';
 import type { ArenaFrame } from './arenaScene3d';
 
 const unit = (patch: Partial<BattleUnitRuntime> = {}) => ({
@@ -292,6 +292,8 @@ test('hero bodies catch the arena pulse flare, then settle back to the palette r
     }
     assert.equal(backend.arenaStatus!('temple'), 'ready');
     assert.equal(backend.drawArena!(screen.ctx, temple, frame()), true);
+    assert.equal(backend.arenaWeatherCount!(), arenaWeather('temple').count,
+      'the weather field is reported once the stage draws');
     await drawHero();
     const idle = screen.lights.at(-1)!;
     // Thứ tự scene: hemisphere, key, rim.

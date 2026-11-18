@@ -119,6 +119,8 @@ try {
   await wait(`(${arenaState}).drawn===true`, 25000);
   result.arenas.ready = await evaluate(arenaState);
   assert.equal(result.arenas.ready.drawn, true, 'arena never rendered');
+  // Thời tiết của sân là lớp 3D thật: phải báo số hạt > 0 khi sân đã vẽ.
+  assert.ok(Number(result.arenas.ready.weather) > 0, 'arena weather field never reported by the live canvas');
   if (verifyFog) {
     await wait('window.__arenaFogDraws?.size > 0');
     result.fogUniforms = await evaluate('[...window.__arenaFogDraws.values()]');

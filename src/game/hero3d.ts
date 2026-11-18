@@ -99,6 +99,8 @@ export interface HeroRenderBackend {
   /** Draws the Blender arena behind the fighters; false when no scene is ready. */
   drawArena?(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean;
   arenaStatus?(id: ArenaSceneId): string;
+  /** Particle count of the active arena weather field; 0 before the 3D stage draws. */
+  arenaWeatherCount?(): number;
   /** Matches the shared buffer to the canvas resolution; the crop aspect stays 384:448. */
   resize?(width: number, height: number, pixelRatio: number): void;
 }
@@ -306,6 +308,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       return definition ? vfx.status(definition.sourceId) : 'disabled';
     },
     arenaStatus: (id: ArenaSceneId): string => disposed ? 'failed' : arena.status(id),
+    arenaWeatherCount: (): number => disposed ? 0 : arena.weatherCount(),
     /** Độ hiện của model thân: 0 khi chưa có, tăng dần trong 260 ms rồi đứng ở 1. */
     bodyReveal(instanceId: string): number {
       if (disposed) return 1;
@@ -488,6 +491,11 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
     arenaStatus: (id: ArenaSceneId): string => {
       if (state === 'disposed' || state === 'failed') return 'failed';
       try { return backend?.arenaStatus?.(id) || 'idle'; } catch { return 'failed'; }
+    },
+    /** Số hạt thời tiết đang vẽ; 0 khi chưa có backend hoặc chưa có lớp sân. */
+    arenaWeatherCount: (): number => {
+      if (state === 'disposed' || state === 'failed') return 0;
+      try { return backend?.arenaWeatherCount?.() ?? 0; } catch { return 0; }
     },
     /** Loads the backend on demand so the arena can render before any hero body does. */
     drawArena(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean {

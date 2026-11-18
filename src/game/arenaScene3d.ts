@@ -266,6 +266,8 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       return records.get(id)?.state || 'missing';
     },
     activeId(): ArenaSceneId | undefined { return active?.id; },
+    /** Số hạt thời tiết của sân đang hiện; 0 khi chưa có lớp 3D. */
+    weatherCount(): number { return active?.weather.spec.count ?? 0; },
     /** One render per frame; returns false when no scene is ready yet. */
     draw(renderer: Three.WebGLRenderer, ctx: CanvasRenderingContext2D,
       definition: ArenaDefinition, frame: ArenaFrame): boolean {
