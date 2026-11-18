@@ -29,6 +29,7 @@ import { hitFlashFilter } from '../game/spriteHitFlash';
 import { dustPuff, MOVE_DUST_INTERVAL } from '../game/spriteMoveDust';
 import { readyAura } from '../game/spriteReadyAura';
 import { getUltimateReadiness } from '../game/ultimateReadiness';
+import { deathTide, DEATH_TIDE_SECONDS } from '../game/spriteDeathTide';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -96,6 +97,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     const dust: Array<{ at: number; seed: number; x: number; y: number; facing: number }> = [];
     /** Mốc đồng hồ của hạt bụi gần nhất theo từng instance, để không xả mỗi khung. */
     const lastDustAt = new Map<string, number>();
+    /** Tướng đã gục + mốc trình diễn lúc gục, cho chuỗi cột sáng và vệt sàn. */
+    const deaths: Array<{ at: number; x: number; y: number; ultimate: boolean }> = [];
     const feed: UltimateAnnouncement[] = [];
     const publishAnnouncements = () => setAnnouncements(feed.map(entry => ({ ...entry })));
     let impactShake = 0, visualClock = 0;
@@ -203,6 +206,11 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
           const effect = createSpriteEffect(event, source, target);
           if (effect) effects.push(Object.assign(effect, { sourceId: source.instanceId, hitIndex: event.hitIndex,
             outcomeAtMs: event.timestampMs }));
+          // Chuỗi gục: mốc trình diễn riêng để cột sáng chạy đúng nhịp pause/×2.
+          if (effect?.kind === 'death' && deaths.length < 10) {
+            deaths.push({ at: visualClock, x: target.x, y: target.y,
+              ultimate: event.skillSlot === 'ultimate' });
+          }
         }
         if (target && ['damage', 'heal', 'shield'].includes(event.type)) {
           addCombatText(texts, event, target);
@@ -436,7 +444,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         lastUltimate = undefined;
         arenaRevealId = undefined; arenaRevealAt = 0;
         active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; shocks.length = 0;
-        dust.length = 0; lastDustAt.clear(); dustSeed = 0;
+        dust.length = 0; lastDustAt.clear(); dustSeed = 0; deaths.length = 0;
         accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }
@@ -510,6 +518,49 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
           ctx.ellipse(at.x + state.dx, at.y + state.dy + 1.5 * stageScale,
             state.radius, state.radius * .5, 0, 0, Math.PI * 2);
           ctx.fill();
+          ctx.restore();
+        }
+      }
+      // Chuỗi gục: vệt sàn + cột sáng dâng lên rồi tan, vẽ trên lớp sàn trước tướng.
+      if (deaths.length) {
+        const stageScale = getSpriteBattleScale(width, height);
+        for (let index = deaths.length - 1; index >= 0; index--) {
+          const death = deaths[index];
+          const age = visualClock - death.at;
+          const tide = deathTide(age, stageScale, death.ultimate);
+          if (!tide.alive) { deaths.splice(index, 1); continue; }
+          const at = projectSpritePosition(death.x, death.y, width, height);
+          ctx.save();
+          // Vệt tối dưới sàn, dẹt theo mặt phẳng nghiêng.
+          if (tide.stainOpacity > 0) {
+            ctx.globalAlpha = tide.stainOpacity;
+            ctx.fillStyle = '#0d0a12';
+            ctx.beginPath();
+            ctx.ellipse(at.x, at.y + 2 * stageScale, tide.stainRadius, tide.stainRadius * .34, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Cột sáng dâng từ chân: gradient dọc để đỉnh tan vào không khí.
+          if (tide.columnOpacity > 0) {
+            const top = at.y - tide.columnHeight;
+            const column = ctx.createLinearGradient(0, top, 0, at.y);
+            column.addColorStop(0, 'rgba(255,246,220,0)');
+            column.addColorStop(.45, `rgba(255,246,220,${(tide.columnOpacity * .85).toFixed(3)})`);
+            column.addColorStop(1, `rgba(255,236,190,${tide.columnOpacity.toFixed(3)})`);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = column;
+            ctx.beginPath();
+            ctx.ellipse(at.x, at.y - tide.columnHeight / 2, tide.columnRadius,
+              tide.columnHeight / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          for (const mote of tide.motes) {
+            if (mote.alpha <= 0) continue;
+            ctx.globalAlpha = mote.alpha;
+            ctx.fillStyle = '#fff3d2';
+            ctx.beginPath();
+            ctx.ellipse(at.x + mote.x, at.y + mote.y, mote.r, mote.r, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
           ctx.restore();
         }
       }

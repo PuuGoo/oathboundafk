@@ -19,7 +19,7 @@ test('battle replacement clears the previous arena ultimate timestamp', () => {
     const sim = null;
     let active = {}, lastUltimate = { atMs: 8000, tint: 0xff3322 }, accumulator = 0, impactShake = 0, visualClock = 0;
     const actors = new Map(), texts = [], effects = [], feed = [], shocks = [], dust = [];
-    const lastDustAt = new Map(); let dustSeed = 0;
+    const lastDustAt = new Map(); let dustSeed = 0; const deaths = [];
     const heroes3d = { reset() {} }, publishAnnouncements = () => {};
     ${source.slice(start, end)}
     return lastUltimate;
