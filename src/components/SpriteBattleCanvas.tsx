@@ -239,31 +239,46 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       }
       const image = spec && load(spec.src);
       if (drawSpriteIsolation(ctx, unit, point.x, point.y, scale, !!reduceMotion(), live.current.graphicsPreset === 'LOW')) return;
-      if (heroes3d.draw(ctx, unit, actor, (simulation.current?.getElapsedMs() ?? 0) + accumulator,
-        !!reduceMotion(), point.x, point.y, scale)) {
+      /** Sprite của chính tướng: dùng cho fallback và cho nhịp chuyển sang model 3D. */
+      const drawSpriteBody = () => {
+        const pose = getSpriteActionPose(actor, unit.facing, !!reduceMotion() || !unit.isAlive);
+        ctx.save(); ctx.translate(point.x, point.y);
+        // A physical charge already moves its feet in simulation; do not add a second cosmetic lunge.
+        const poseX = unit.currentCast?.chargePath ? 0 : pose.x;
+        ctx.translate(poseX * scale, pose.y * scale); ctx.rotate(pose.rotation); ctx.scale(pose.scale, pose.scale);
+        ctx.translate(-point.x, -point.y);
+        if (spec && image) drawSpriteActor(ctx, actor, unit, spec, image, point.x, point.y, scale);
+        else {
+          const portrait = load(hero.battleUrl || `/assets/heroes/${hero.id}_battle.webp`);
+          ctx.save(); ctx.translate(point.x, point.y); ctx.scale(unit.facing, 1);
+          // Nhân với alpha ngoài để nhịp chuyển model vẫn áp lên cả ảnh chân dung dự phòng.
+          ctx.globalAlpha *= unit.isAlive ? 1 : 0.3;
+          if (portrait) ctx.drawImage(portrait, -32 * scale, -94 * scale, 64 * scale, 94 * scale);
+          else {
+            ctx.fillStyle = hero.visual.primaryColor;
+            ctx.beginPath(); ctx.arc(0, -64 * scale, 10 * scale, 0, Math.PI * 2); ctx.fill();
+            ctx.fillRect(-12 * scale, -52 * scale, 24 * scale, 48 * scale);
+          }
+          ctx.restore();
+        }
+        ctx.restore();
+      };
+      // Model 3D vừa tải xong: sprite mờ dần bên dưới đúng nhịp model hiện ra, không đổi art đột ngột.
+      const bodyReady = heroes3d.modelStatus(unit.heroId) === 'ready';
+      const reveal = bodyReady ? heroes3d.bodyReveal(unit.instanceId) : 1;
+      if (bodyReady && reveal < 1) {
+        ctx.save(); ctx.globalAlpha = Math.max(0, 1 - reveal); drawSpriteBody(); ctx.restore();
+      }
+      ctx.save();
+      ctx.globalAlpha = reveal;
+      const drawnNow = heroes3d.draw(ctx, unit, actor, (simulation.current?.getElapsedMs() ?? 0) + accumulator,
+        !!reduceMotion(), point.x, point.y, scale);
+      ctx.restore();
+      if (drawnNow) {
         drawn3D.push(unit.instanceId);
         return; // Model owns body poses; never apply a duplicate sprite lunge/rotation.
       }
-      const pose = getSpriteActionPose(actor, unit.facing, !!reduceMotion() || !unit.isAlive);
-      ctx.save(); ctx.translate(point.x, point.y);
-      // A physical charge already moves its feet in simulation; do not add a second cosmetic lunge.
-      const poseX = unit.currentCast?.chargePath ? 0 : pose.x;
-      ctx.translate(poseX * scale, pose.y * scale); ctx.rotate(pose.rotation); ctx.scale(pose.scale, pose.scale);
-      ctx.translate(-point.x, -point.y);
-      if (spec && image) drawSpriteActor(ctx, actor, unit, spec, image, point.x, point.y, scale);
-      else {
-        const portrait = load(hero.battleUrl || `/assets/heroes/${hero.id}_battle.webp`);
-        ctx.save(); ctx.translate(point.x, point.y); ctx.scale(unit.facing, 1);
-        ctx.globalAlpha = unit.isAlive ? 1 : 0.3;
-        if (portrait) ctx.drawImage(portrait, -32 * scale, -94 * scale, 64 * scale, 94 * scale);
-        else {
-          ctx.fillStyle = hero.visual.primaryColor;
-          ctx.beginPath(); ctx.arc(0, -64 * scale, 10 * scale, 0, Math.PI * 2); ctx.fill();
-          ctx.fillRect(-12 * scale, -52 * scale, 24 * scale, 48 * scale);
-        }
-        ctx.restore();
-      }
-      ctx.restore();
+      if (!bodyReady || reveal >= 1) drawSpriteBody();
       return;
       }
       if (!unit.isAlive) return;

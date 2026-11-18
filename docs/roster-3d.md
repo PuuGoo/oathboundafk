@@ -48,7 +48,7 @@ Bằng chứng cục bộ: `production/qa/evidence/roster3d/asset-check.json`, `
 
 ## Renderer và kiểm tra runtime
 
-`hero3d.ts` dùng chung một renderer WebGL 384×448 và hàng đợi tải từng GLB. Mỗi instance có skeleton/mixer độc lập, kể cả khi cùng tướng xuất hiện ở cả hai phe. Tướng đang tải hoặc bị lỗi dùng sprite cũ; lỗi một GLB không vô hiệu hóa các model khác. Reset trận giải phóng instance và model đã tải để cache không tăng theo toàn bộ roster. Load hoàn thành sau reset/unmount được giải phóng. Belinda giữ nguồn trượng và mesh phép cũ; API Belinda riêng vẫn tương thích.
+`hero3d.ts` dùng chung một renderer WebGL với buffer khung 384:448 nhưng **độ phân giải theo canvas** (`resize(cssWidth, cssHeight, dpr)`, kẹp 384–1024 px chiều rộng, LOW preset giữ 1×) và hàng đợi tải từng GLB. Mỗi instance có skeleton/mixer độc lập, kể cả khi cùng tướng xuất hiện ở cả hai phe. Tướng đang tải hoặc bị lỗi dùng sprite cũ; lỗi một GLB không vô hiệu hóa các model khác. Model vừa tải xong **hiện dần trong 260 ms** đè lên sprite (`bodyReveal`), nên không có cú đổi art đột ngột giữa trận. Reset trận giải phóng instance và model đã tải để cache không tăng theo toàn bộ roster. Load hoàn thành sau reset/unmount được giải phóng. Belinda giữ nguồn trượng và mesh phép cũ; API Belinda riêng vẫn tương thích.
 
 `SpriteBattleCanvas` dùng backend này trong body pass đã sắp xếp độ sâu. Không thay simulation, ID, save hoặc hệ kỹ năng. `canvas.dataset.heroes3d` chỉ báo trạng thái model và instance thực sự được vẽ; `belinda3d`/`belindaSpells` vẫn phục vụ quan sát riêng Belinda. Không có API kích hoạt combat trong các dataset.
 

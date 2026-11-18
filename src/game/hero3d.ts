@@ -32,6 +32,8 @@ const ACTION_CLIP: Readonly<Partial<Record<SpriteActor['actionKind'], HeroClip>>
 });
 const CONTROL_TYPES = new Set(['stun', 'petrify', 'isolation']);
 const LOOPING_CLIPS = new Set<HeroClip>(['idle', 'run']);
+/** Model vừa tải xong hiện dần đè lên sprite trong bao lâu (mili-giây trận đấu). */
+const BODY_REVEAL_MS = 260;
 
 function finite(value: number, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
@@ -92,6 +94,8 @@ export interface HeroRenderBackend {
   modelStatus?(heroId: string): HeroModelStatus;
   /** Blender effect-asset status per hero; separate from the body-model status. */
   vfxStatus?(heroId: string): string;
+  /** 0..1 body fade-in for an instance; 1 once the model has fully replaced the sprite. */
+  bodyReveal?(instanceId: string): number;
   /** Draws the Blender arena behind the fighters; false when no scene is ready. */
   drawArena?(ctx: CanvasRenderingContext2D, definition: ArenaDefinition, frame: ArenaFrame): boolean;
   arenaStatus?(id: ArenaSceneId): string;
@@ -133,6 +137,9 @@ type HeroInstance = {
   pose?: HeroPose;
   staff?: Three.Object3D;
   staffLocal?: Three.Vector3;
+  /** Mốc trận đấu của khung vẽ 3D đầu tiên và độ hiện 0..1 của model so với sprite. */
+  bornMs?: number;
+  reveal?: number;
 };
 
 const REQUIRED_CLIPS: readonly HeroClip[] = ['idle', 'run', 'basic', 'active', 'ultimate', 'hit', 'death'];
@@ -299,6 +306,11 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       return definition ? vfx.status(definition.sourceId) : 'disabled';
     },
     arenaStatus: (id: ArenaSceneId): string => disposed ? 'failed' : arena.status(id),
+    /** Độ hiện của model thân: 0 khi chưa có, tăng dần trong 260 ms rồi đứng ở 1. */
+    bodyReveal(instanceId: string): number {
+      if (disposed) return 1;
+      return instances.get(instanceId)?.reveal ?? 0;
+    },
     /** Khớp độ phân giải buffer với canvas thật (CSS × DPR), có trần để máy yếu không vỡ RAM GPU. */
     resize(width: number, _height: number, pixelRatio: number): void {
       if (disposed) return;
@@ -374,6 +386,11 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       const clipTime = expected > 0 ? pose.seconds / expected * clip.duration : pose.seconds;
       instance.mixer.setTime(LOOPING_CLIPS.has(pose.clip) ? clipTime % clip.duration : Math.min(clipTime, clip.duration));
       instance.pose = pose; instance.root.visible = true;
+      // Khung vẽ 3D đầu tiên mở đồng hồ hiện dần; sprite mờ đi đúng nhịp này.
+      const now = Number.isFinite(elapsedMs) ? elapsedMs : 0;
+      if (instance.bornMs === undefined) instance.bornMs = now;
+      const revealT = Math.max(0, Math.min(1, (now - instance.bornMs) / BODY_REVEAL_MS));
+      instance.reveal = revealT * revealT * (3 - 2 * revealT);
       // Expand only the crop; inverse-zoom compositing below preserves feet, scale and spell origin.
       camera.zoom = pose.clip === 'death' ? .55 : .9; camera.updateProjectionMatrix();
       anchor.set(0, 0, 0).project(camera);
@@ -463,6 +480,10 @@ export function createHero3D(load: () => Promise<HeroRenderBackend> = loadHeroBa
     vfxModelStatuses,
     vfxDrawnIds: (): readonly number[] => {
       try { return backend?.vfxDrawnIds?.() || []; } catch { return []; }
+    },
+    /** 0..1 model-vs-sprite fade for one unit; 1 when no backend is ready yet. */
+    bodyReveal: (instanceId: string): number => {
+      try { return backend?.bodyReveal?.(instanceId) ?? 1; } catch { return 1; }
     },
     arenaStatus: (id: ArenaSceneId): string => {
       if (state === 'disposed' || state === 'failed') return 'failed';

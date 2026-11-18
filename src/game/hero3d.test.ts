@@ -206,6 +206,26 @@ test('the shared 3D buffer follows the canvas resolution and keeps the 384:448 c
   backend.dispose();
 });
 
+test('a loaded body fades in over its sprite instead of swapping instantly', async () => {
+  const screen = surface();
+  const backend = await loadHeroBackend({ renderer: screen.renderer, loadModel: async () => asset() });
+  const u = unit();
+  assert.equal(backend.bodyReveal!(u.instanceId), 0, 'no body before the first 3D frame');
+  backend.draw(screen.ctx, u, actor(), 0, false, 0, 0, 1); await flush();
+  backend.draw(screen.ctx, u, actor(), 0, false, 0, 0, 1);
+  assert.equal(backend.bodyReveal!(u.instanceId), 0, 'the first model frame starts fully transparent');
+  backend.draw(screen.ctx, u, actor(), 130, false, 0, 0, 1);
+  const half = backend.bodyReveal!(u.instanceId);
+  assert.ok(half > .3 && half < .7, `halfway through the fade the body is half visible (${half})`);
+  backend.draw(screen.ctx, u, actor(), 400, false, 0, 0, 1);
+  assert.equal(backend.bodyReveal!(u.instanceId), 1, 'the body is solid after 260 ms');
+  backend.draw(screen.ctx, u, actor(), 900, false, 0, 0, 1);
+  assert.equal(backend.bodyReveal!(u.instanceId), 1, 'and stays solid for the rest of the battle');
+  backend.reset();
+  assert.equal(backend.bodyReveal!(u.instanceId), 0, 'reset drops the body with its reveal');
+  backend.dispose();
+});
+
 test('a canvas size reported before the backend exists is applied once it loads', async () => {
   let resolve!: (backend: HeroRenderBackend) => void;
   const sizes: number[][] = [];
@@ -336,6 +356,8 @@ test('active canvas uses generic model diagnostics and retains filtered Belinda 
   assert.match(canvas, /canvas\.dataset\.heroes3d/);
   assert.match(canvas, /models: Object\.fromEntries\(heroes3d\.modelStatuses/);
   assert.match(canvas, /drawn: drawn3D\.filter\(id => belindaIds\.has\(id\)\)/);
+  assert.match(canvas, /heroes3d\.bodyReveal\(unit\.instanceId\)/,
+    'the canvas must fade the sprite under a freshly loaded 3D body');
   assert.doesNotMatch(canvas, /createBelinda3D\(/);
 });
 
