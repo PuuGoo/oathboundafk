@@ -70,6 +70,20 @@ export function heroVfxTint(heroId: string): number | undefined {
   return Number.parseInt(spec.primary, 16) & 0xffffff;
 }
 
+/** Bảng ba màu của hiệu ứng, đọc cùng manifest; dùng để nhuộm riêng cú tuyệt kỹ. */
+export interface HeroVfxPalette { readonly primary: number; readonly accent: number }
+
+const paletteOf = (value: unknown): number | undefined =>
+  typeof value === 'string' && /^[0-9a-f]{6}$/i.test(value) ? Number.parseInt(value, 16) & 0xffffff : undefined;
+
+export function heroVfxPalette(heroId: string): HeroVfxPalette | undefined {
+  const spec = authoredByHero.get(heroId);
+  if (!spec) return undefined;
+  const primary = paletteOf(spec.primary), accent = paletteOf(spec.accent);
+  if (primary === undefined) return undefined;
+  return Object.freeze({ primary, accent: accent ?? primary });
+}
+
 /** Damage alone owns this burst; heal/shield/control keep their semantic Canvas art. */
 const OUTCOME_KINDS = new Set<SpriteEffect['kind']>(['impact']);
 

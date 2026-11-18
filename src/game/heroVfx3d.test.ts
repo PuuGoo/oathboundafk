@@ -10,7 +10,7 @@ import { getCombatTimeline } from './skillTimelines';
 import type { BattleUnitRuntime, CombatEvent } from './types';
 import type { SpriteEffect } from './spriteBattleEffects';
 import { VFX_CLIP_SECONDS } from './heroVfx';
-import { HERO_VFX_DEFINITIONS, getHeroVfx } from './heroVfx';
+import { HERO_VFX_DEFINITIONS, getHeroVfx, heroVfxPalette } from './heroVfx';
 import { OATHBOUND_HEROES } from './oathboundHeroes';
 
 const source = { instanceId: 'mage', heroId: 'belinda', team: 'ally', x: 250, y: 230 } as BattleUnitRuntime;
@@ -263,6 +263,42 @@ test('the floor light under a projectile travels with the spell instead of stayi
   assert.ok(ground.z < front.z, 'the floor copy sits behind the body layer');
   assert.ok(ground.scaleY < ground.scaleX * .7, 'the floor copy is flattened onto the ground');
   assert.ok(ground.peak < front.peak * .75, 'the floor spill must stay subordinate to the cast');
+  scene.dispose();
+});
+
+test('an ultimate wears the hero accent colour while a basic cast keeps the authored one', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  /** Màu của các material đang vẽ, tính cả mesh của vệt (không có vệt ở basic). */
+  const colours = (): THREE.Color[] => screen.captures.at(-1)!.meshes.map(mesh => {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    return (materials[0] as THREE.MeshBasicMaterial).color;
+  });
+  const basic = cast('basic', .2);
+  scene.draw(screen.renderer, screen.ctx, [basic], 'front', frame);
+  await settle(scene);
+  scene.draw(screen.renderer, screen.ctx, [basic], 'front', frame);
+  const authored = colours().map(colour => colour.getHex());
+  const palette = heroVfxPalette('belinda')!;
+
+  const ultimate = cast('ultimate', .2, 2);
+  scene.draw(screen.renderer, screen.ctx, [ultimate], 'front', frame);
+  const tinted = colours().map(colour => colour.getHex());
+  assert.notDeepEqual(tinted, authored, 'the ultimate must not look identical to a basic cast');
+  // Mỗi material của cú tuyệt kỹ phải gần accent hơn (hoặc bằng) chính nó ở đòn thường.
+  const target = new THREE.Color(palette.accent);
+  let moved = 0;
+  tinted.forEach((hex, index) => {
+    const before = new THREE.Color(authored[index]);
+    const colour = new THREE.Color(hex);
+    const toAccent = Math.abs(colour.r - target.r) + Math.abs(colour.g - target.g) + Math.abs(colour.b - target.b);
+    const wasAccent = Math.abs(before.r - target.r) + Math.abs(before.g - target.g) + Math.abs(before.b - target.b);
+    assert.ok(toAccent <= wasAccent + 1e-6, `material ${index} drifted away from the hero accent`);
+    if (toAccent < wasAccent - 1e-6) moved++;
+  });
+  assert.ok(moved >= 3, `the accent must actually reach the effect (${moved} materials moved)`);
+  // Trở lại basic: màu tác giả phải được phục hồi, không dính màu tuyệt kỹ.
+  scene.draw(screen.renderer, screen.ctx, [basic], 'front', frame);
+  assert.deepEqual(colours().map(colour => colour.getHex()), authored);
   scene.dispose();
 });
 

@@ -3,7 +3,7 @@ import type * as Three from 'three';
 import type { SpriteEffect } from './spriteBattleEffects';
 import { getSpriteBattleScale, projectSpritePosition } from './spriteBattleRenderer';
 import {
-  HERO_VFX_DEFINITIONS, sampleVfxBatch, VFX_STYLE, VFX_CLIP_SECONDS, type HeroVfxSample,
+  heroVfxPalette, HERO_VFX_DEFINITIONS, sampleVfxBatch, VFX_STYLE, VFX_CLIP_SECONDS, type HeroVfxSample,
 } from './heroVfx';
 
 /**
@@ -49,7 +49,7 @@ type Instance = {
   mixer: Three.AnimationMixer;
   action?: Three.AnimationAction;
   clipName?: string;
-  materials: Array<{ material: Three.Material; factor: number; halo: boolean }>;
+  materials: Array<{ material: Three.MeshBasicMaterial; factor: number; halo: boolean; base: Three.Color }>;
   lastPass: number;
   /** Độ mờ gốc của frame gần nhất, để vệt tan bắt đầu đúng chỗ effect dừng. */
   sampleOpacity: number;
@@ -89,6 +89,8 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
   const instances = new Map<number, Instance>();
   /** Vệt bay, tách khỏi pool chính để chúng không đẩy hiệu ứng thật ra khỏi ngân sách 16. */
   const trails = new Map<number, Instance[]>();
+  /** Màu chiêu dùng lại mỗi frame thay vì cấp phát `Color` trong vòng vẽ. */
+  const tintColor = new THREE.Color();
   let disposed = false;
   let pass = 0;
   const queue: Record_[] = [];
@@ -174,7 +176,7 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
         });
         if (name === 'vfx_halo') copy.color.multiplyScalar(.75);
         const factor = OPACITY_FACTOR[name] ?? 1;
-        materials.push({ material: copy, factor, halo: name === 'vfx_halo' });
+        materials.push({ material: copy, factor, halo: name === 'vfx_halo', base: copy.color.clone() });
         copies.set(material, copy);
         return copy;
       });
@@ -275,7 +277,12 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     // Lớp sàn chỉ là ánh sáng hắt xuống, nên mờ hơn lớp trước để không thành bản sao thứ hai.
     const groundLight = layer === 'ground' && !impact && !sample.support ? .6 : 1;
     instance.sampleOpacity = Math.max(0, Math.min(1, sample.opacity * sample.brightness * groundLight));
+    // Tuyệt kỹ mang màu `accent` của tướng: cú cao cấp khác màu đòn thường dù cùng một GLB.
+    const palette = sample.slot === 'ultimate' ? heroVfxPalette(sample.heroId) : undefined;
+    const accent = palette ? tintColor.setHex(palette.accent) : undefined;
     for (const entry of instance.materials) {
+      entry.material.color.copy(entry.base);
+      if (accent) entry.material.color.lerp(accent, entry.halo ? .34 : .5);
       const fade = frame.low && entry.halo ? .5 : 1;
       entry.material.opacity = Math.max(0, Math.min(1, instance.sampleOpacity * entry.factor * fade));
     }
