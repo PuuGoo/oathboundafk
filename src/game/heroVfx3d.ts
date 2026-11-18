@@ -14,6 +14,8 @@ import {
 export interface HeroVfxFrame {
   width: number; height: number; reducedMotion: boolean; low: boolean;
   staffAnchors?: ReadonlyMap<string, { x: number; y: number }>;
+  /** Đồng hồ trình diễn (giây) đã pause/×2 theo trận; dùng cho vệt tan của đòn chạm. */
+  clock?: number;
 }
 export interface LoadedVfx { scene: Three.Object3D; animations: Three.AnimationClip[] }
 export interface HeroVfxDependencies { loadModel?: (url: string) => Promise<LoadedVfx> }
@@ -24,6 +26,8 @@ const OPACITY_FACTOR: Readonly<Record<string, number>> = Object.freeze({
 });
 const PRUNE_PASSES = 90;
 const MAX_INSTANCES = 16;
+/** Đòn chạm giữ lại trên sàn bao lâu sau khi effect kết thúc (giây trình diễn). */
+const IMPACT_GHOST_SECONDS = .55;
 
 type Namespace = typeof import('three');
 type Record_ = {
@@ -42,6 +46,12 @@ type Instance = {
   clipName?: string;
   materials: Array<{ material: Three.Material; factor: number; halo: boolean }>;
   lastPass: number;
+  /** Độ mờ gốc của frame gần nhất, để vệt tan bắt đầu đúng chỗ effect dừng. */
+  sampleOpacity: number;
+  /** Mốc đồng hồ trình diễn khi effect kết thúc và vệt bắt đầu tan. */
+  ghostSince?: number;
+  /** Layer của lần đặt cuối; vệt tan chỉ vẽ lại đúng layer đó. */
+  layer: 'ground' | 'front';
 };
 
 function disposeObject(THREE: Namespace, root: Three.Object3D): void {
@@ -168,6 +178,7 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     scene.add(root);
     const instance: Instance = {
       sourceId: sample.sourceId, root, mixer: new THREE.AnimationMixer(root), materials, lastPass: pass,
+      sampleOpacity: 0, layer: 'front',
     };
     instances.set(sample.id, instance);
     return instance;
@@ -204,12 +215,14 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
     } else center = muzzle;
     const radius = VFX_STYLE.radius * scale * sample.magnitude;
     instance.root.position.set(center.x - frame.width / 2, frame.height / 2 - center.y, layer === 'ground' ? -12 : 0);
+    instance.layer = layer;
     const facing = layer === 'front' && sample.directional && !sample.support && !impact ? toward : 1;
     instance.root.scale.set(radius * facing, radius * flatten, radius);
     instance.root.visible = true;
+    instance.sampleOpacity = Math.max(0, Math.min(1, sample.opacity * sample.brightness));
     for (const entry of instance.materials) {
-      entry.material.opacity = Math.max(0, Math.min(1, sample.opacity * sample.brightness * entry.factor));
-      if (frame.low && entry.halo) entry.material.opacity *= .5;
+      const fade = frame.low && entry.halo ? .5 : 1;
+      entry.material.opacity = Math.max(0, Math.min(1, instance.sampleOpacity * entry.factor * fade));
     }
   };
 
@@ -228,8 +241,8 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
       pass++;
       for (const [id, instance] of instances) if (pass - instance.lastPass > PRUNE_PASSES) dropInstance(id);
       const samples = sampleVfxBatch(effects, frame.width, frame.height, frame.reducedMotion);
-      if (!samples.length) return handled;
       const drawn: Instance[] = [];
+      const live = new Set<number>();
       for (const sample of samples) {
         let record = records.get(sample.sourceId);
         if (record?.state === 'idle') record = request(sample.sourceId);
@@ -249,9 +262,30 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
         instance.action.paused = false;
         instance.mixer.setTime((frame.reducedMotion ? .55 : sample.progress) * clip.duration);
         instance.lastPass = pass;
+        instance.ghostSince = undefined;
         place(instance, sample, layer, frame);
         drawn.push(instance);
+        live.add(sample.id);
         handled.add(sample.id);
+      }
+      // Đòn chạm tan dần trên sàn: effect đã hết nhưng instance còn giữ pose cuối thêm ~0,55 s,
+      // nên vết lửa không biến mất đột ngột. Dùng đồng hồ trình diễn để pause/×2 áp đúng.
+      const clock = frame.clock;
+      if (clock !== undefined && Number.isFinite(clock) && !frame.reducedMotion) {
+        for (const [id, instance] of instances) {
+          if (live.has(id) || instance.clipName !== 'impact' || instance.layer !== layer) continue;
+          instance.ghostSince ??= clock;
+          const age = clock - instance.ghostSince;
+          if (!(age >= 0) || age >= IMPACT_GHOST_SECONDS) continue;
+          const fade = (1 - age / IMPACT_GHOST_SECONDS) ** 2;
+          instance.root.visible = true;
+          for (const entry of instance.materials) {
+            const low = frame.low && entry.halo ? .5 : 1;
+            entry.material.opacity = Math.max(0, Math.min(1, instance.sampleOpacity * entry.factor * low * fade));
+          }
+          instance.lastPass = pass;
+          drawn.push(instance);
+        }
       }
       for (const [id, instance] of instances) if (pass - instance.lastPass > PRUNE_PASSES) dropInstance(id);
       if (!drawn.length) return handled;

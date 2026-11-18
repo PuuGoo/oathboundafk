@@ -22,6 +22,8 @@ const event = (slot: 'basic' | 'active' | 'ultimate') => ({
 } as CombatEvent);
 const cast = (slot: 'basic' | 'active' | 'ultimate', age = 0, id = 1) =>
   ({ ...createSpriteEffect(event(slot), source, target)!, id, age });
+const hit = (age = 0, id = 9) => ({ ...createSpriteEffect(
+  { ...event('active'), id, type: 'damage', value: 12 }, source, target)!, id, age });
 const frame = { width: 480, height: 680, reducedMotion: false, low: false };
 /** Records are keyed by source id; Belinda's authored file is `belinda.glb`. */
 const BOOT = 'mage';
@@ -171,6 +173,44 @@ test('front casts get one additive blur halo and the canvas state is restored', 
   screen.ops.length = 0;
   scene.draw(screen.renderer, screen.ctx, [effect], 'ground', frame);
   assert.equal(screen.ops.length, 1, 'ground rings do not bloom into the fighters');
+  scene.dispose();
+});
+
+test('a ground impact keeps dissolving on the floor after its effect ends', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const effect = hit(.2);
+  /** Độ mờ lớn nhất trong lớp vừa vẽ; vệt tan phải thấp hơn frame đang chạy. */
+  const peakOpacity = (): number => Math.max(...screen.captures.at(-1)!.meshes.map(mesh => {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    return Math.max(...materials.map(material => material.opacity));
+  }));
+  scene.draw(screen.renderer, screen.ctx, [effect], 'ground', { ...frame, clock: 0 });
+  await settle(scene);
+  scene.draw(screen.renderer, screen.ctx, [effect], 'ground', { ...frame, clock: .2 });
+  const alive = peakOpacity();
+  assert.ok(alive > 0, 'the impact itself is visible');
+
+  // Effect đã hết: vệt vẫn còn trên sàn ở đúng frame cuối.
+  const drawsBefore = screen.stats.draws;
+  scene.draw(screen.renderer, screen.ctx, [], 'ground', { ...frame, clock: .3 });
+  assert.equal(screen.stats.draws - drawsBefore, 1, 'the fading impact still composites one layer');
+  assert.ok(Math.abs(peakOpacity() - alive) < 1e-6, 'the tail starts at the opacity the effect ended with');
+
+  // Nửa đường: mờ dần chứ không giữ nguyên.
+  scene.draw(screen.renderer, screen.ctx, [], 'ground', { ...frame, clock: .55 });
+  const fading = peakOpacity();
+  assert.ok(fading > 0 && fading < alive * .8, `the tail must fade (${fading} vs ${alive})`);
+
+  // Quá thời lượng vệt: không còn gì để vẽ.
+  const idleDraws = screen.stats.draws;
+  scene.draw(screen.renderer, screen.ctx, [], 'ground', { ...frame, clock: .95 });
+  assert.equal(screen.stats.draws, idleDraws, 'the tail is gone after 0.55 s of presentation time');
+
+  // Reduced motion không để lại vệt: sân đứng yên, không thêm chuyển động.
+  scene.draw(screen.renderer, screen.ctx, [effect], 'ground', { ...frame, clock: 1.2 });
+  const before = screen.stats.draws;
+  scene.draw(screen.renderer, screen.ctx, [], 'ground', { ...frame, clock: 1.3, reducedMotion: true });
+  assert.equal(screen.stats.draws, before, 'reduced motion never leaves a dissolving tail');
   scene.dispose();
 });
 

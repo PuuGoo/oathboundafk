@@ -50,6 +50,8 @@ export function spellEffectsForFallback(effects: readonly SpriteEffect[], handle
 export interface BelindaSpellFrame {
   width: number; height: number; reducedMotion: boolean; low: boolean;
   staffAnchors: ReadonlyMap<string, Point>;
+  /** Đồng hồ trình diễn (giây) đã pause/×2 theo trận; cảnh nào cần vệt tan thì dùng. */
+  clock?: number;
 }
 
 /** Reusable real-mesh spell scene. It borrows, never owns, the character's WebGL renderer. */

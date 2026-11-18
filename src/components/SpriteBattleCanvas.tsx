@@ -329,7 +329,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       drawSpriteBattleLayers(units, effects, !!reduceMotion(), unit => drawUnit(unit, playDt),
         (batch, layer) => {
           const handled = heroes3d.drawSpells(ctx, batch, layer, { width, height,
-            reducedMotion: !!reduceMotion(), low: p.graphicsPreset === 'LOW' });
+            reducedMotion: !!reduceMotion(), low: p.graphicsPreset === 'LOW', clock: visualClock });
           handled.forEach(id => spellDrawn.set(id, layer));
           drawSpriteEffects(ctx, spellEffectsForFallback(batch, handled), width, height,
             !!reduceMotion(), layer, p.graphicsPreset === 'LOW');
