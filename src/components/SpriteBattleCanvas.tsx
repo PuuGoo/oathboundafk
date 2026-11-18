@@ -22,6 +22,7 @@ import { spellEffectsForFallback } from '../game/belindaSpell3d';
 import { getHeroVfx, heroVfxTint } from '../game/heroVfx';
 import { arenaLighting, arenaPulseOpacity, resolveArenaScene, ARENA_CLIP_SECONDS } from '../game/arena3d';
 import { groundShadow } from '../game/spriteGroundShadow';
+import { impactShock, IMPACT_SHOCK_SECONDS } from '../game/spriteImpactShock';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -82,6 +83,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     let hitAreas: Array<{ id: string; x: number; y: number; radius: number }> = [];
     const texts: CombatText[] = [];
     const effects: SpriteEffect[] = [];
+    /** Vòng xung kích đang chạy tại điểm chạm, tính bằng đồng hồ trình diễn. */
+    const shocks: Array<{ id: number; at: number; strength: number; x: number; y: number; tint: string }> = [];
     const feed: UltimateAnnouncement[] = [];
     const publishAnnouncements = () => setAnnouncements(feed.map(entry => ({ ...entry })));
     let impactShake = 0, visualClock = 0;
@@ -198,6 +201,13 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
             if (hit) {
               hit.flash = 0.12;
               startSpriteAction(hit, 'hit', getOathboundSprite(getHeroById(target.heroId).unitId));
+            }
+            // Vòng xung kích ở chân người trúng: mạnh theo bậc chiêu, nhuộm màu bên đánh.
+            const power = event.skillSlot === 'ultimate' ? 1.6 : event.skillSlot === 'active' ? 1 : .45;
+            if (shocks.length < 12) {
+              shocks.push({ id: event.id, at: visualClock, strength: power,
+                x: target.x, y: target.y,
+                tint: source.team === 'ally' ? '#ffe6a8' : '#ffb0a8' });
             }
           }
         }
@@ -344,7 +354,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         heroes3d.reset();
         lastUltimate = undefined;
         arenaRevealId = undefined; arenaRevealAt = 0;
-        active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
+        active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; shocks.length = 0;
+        accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }
       const playDt = p.isPaused ? 0 : dt * p.battleSpeed;
@@ -380,6 +391,27 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       }
       impactShake = Math.max(0, impactShake - playDt);
       drawFloor(); hitAreas = []; drawn3D = []; heroes3d.beginFrame();
+      // Vòng xung kích: vẽ ngay trên sàn, trước khi tướng đè lên nên không che mặt anh hùng.
+      if (shocks.length) {
+        const stageScale = getSpriteBattleScale(width, height);
+        for (let index = shocks.length - 1; index >= 0; index--) {
+          const shock = shocks[index];
+          const age = visualClock - shock.at;
+          if (!(age >= 0) || age >= IMPACT_SHOCK_SECONDS) { shocks.splice(index, 1); continue; }
+          if (reduceMotion()) { shocks.splice(index, 1); continue; }
+          const ring = impactShock(age, shock.strength, stageScale);
+          if (!ring.alive) { shocks.splice(index, 1); continue; }
+          const at = projectSpritePosition(shock.x, shock.y, width, height);
+          ctx.save();
+          ctx.globalAlpha = ring.opacity;
+          ctx.strokeStyle = shock.tint;
+          ctx.lineWidth = ring.lineWidth;
+          ctx.beginPath();
+          ctx.ellipse(at.x, at.y, ring.radius, ring.radius * ring.flatten, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
       const dimAge = Math.max(0, ...feed.map(entry => entry.remaining - presentation.ultimate.bannerSeconds + presentation.effects.ultimateSeconds));
       if (!reduceMotion() && p.ultimateCameraEnabled !== false && dimAge > 0) {
         ctx.save(); ctx.globalAlpha = presentation.ultimate.dimOpacity * Math.min(1, dimAge / 0.3);
