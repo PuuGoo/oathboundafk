@@ -262,6 +262,14 @@ test('each arena draws one weather field that moves on the presentation clock', 
   scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 9, reducedMotion: true, reveal: 1 }));
   assert.equal(height(), frozen, 'reduced motion freezes the weather');
   assert.equal((points[0].material as THREE.PointsMaterial).opacity, spec.opacity);
+  // Tuyệt kỹ: hạt bắt sáng của cú tung.
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 1, reveal: 1, pulseAge: .12 }));
+  assert.ok((points[0].material as THREE.PointsMaterial).opacity > spec.opacity,
+    'the weather catches the ultimate flare');
+  // LOW preset: cắt bớt lớp hạt.
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 2, reveal: 1, low: true }));
+  assert.ok(Math.abs((points[0].material as THREE.PointsMaterial).opacity - spec.opacity * .55) < 1e-6,
+    'the LOW preset dims the decorative particle field');
   let released = 0;
   points[0].geometry.addEventListener('dispose', () => released++);
   scene.dispose();

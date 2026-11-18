@@ -23,6 +23,8 @@ export interface ArenaFrame {
   pulseTint?: number;
   /** Giây kể từ lúc sân 3D bắt đầu hiện trên khung; thiếu thì hiện ngay (1). */
   reveal?: number;
+  /** Preset đồ hoạ thấp: bớt lớp trang trí để giữ khung hình. */
+  low?: boolean;
   wallClock: number;
 }
 export interface LoadedArena { scene: Three.Object3D; animations: Three.AnimationClip[] }
@@ -277,6 +279,8 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       if (renderer.getContext().isContextLost()) throw new Error('Arena context lost');
       pass++;
       const sample = sampleArenaPulse(frame.pulseAge, frame.wallClock, frame.reducedMotion);
+      /** Sân bừng lên cùng vòng pulse; dùng chung cho đèn, hạt mưa và vòng sáng. */
+      const flash = sample.clip === 'pulse' ? arenaPulseOpacity(sample.progress) : 0;
       // Sân hiện dần: asset vừa tải xong không được bụp vào khung giữa trận.
       const reveal = frame.reveal === undefined || !Number.isFinite(frame.reveal) ? 1
         : Math.max(0, Math.min(1, frame.reveal / REVEAL_SECONDS));
@@ -297,7 +301,9 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         }
         attribute.needsUpdate = true;
       }
-      current.weather.material.opacity = current.weather.spec.opacity * revealEased;
+      // Mưa/bụi bắt sáng của cú tung; LOW cắt mạnh lớp hạt để đỡ fill rate.
+      current.weather.material.opacity = current.weather.spec.opacity * revealEased
+        * (frame.low ? .55 : 1) * (1 + .8 * flash);
       for (const [name, action] of current.actions) {
         const wanted = name === sample.clip;
         action.enabled = wanted;
@@ -330,7 +336,6 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         entry.material.emissive.lerp(pulseTintColor, PULSE_TINT_MIX);
       }
       // Cả sân bừng theo nhịp pulse: đèn chính mạnh lên và ngả màu chiêu, tan về rig trung tính.
-      const flash = pulseVisible ? arenaPulseOpacity(sample.progress) : 0;
       sun.intensity = SUN_INTENSITY + PULSE_SUN_GAIN * flash;
       rim.intensity = RIM_INTENSITY + PULSE_RIM_GAIN * flash;
       sun.color.copy(sunBase); rim.color.copy(rimBase);

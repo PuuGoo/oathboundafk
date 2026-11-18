@@ -209,6 +209,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         const reveal = arenaRevealId === scene.id ? Math.max(0, visualClock - arenaRevealAt) : 0;
         const drawn = heroes3d.drawArena(ctx, scene, { width, height, centerX: width / 2, centerY: height * 0.57,
           radiusX: width * 0.66, radiusY: height * 0.31, reducedMotion: !!reduceMotion(),
+          low: live.current.graphicsPreset === 'LOW',
           pulseAge, pulseTint: pulseAge === undefined ? undefined : lastUltimate?.tint,
           reveal, wallClock: visualClock });
         // Nhịp hiện dần chỉ bắt đầu từ khung vẽ được đầu tiên, không tính lúc asset còn đang tải.
