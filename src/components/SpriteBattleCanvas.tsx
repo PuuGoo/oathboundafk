@@ -20,7 +20,8 @@ import { soundEngine } from '../game/audio';
 import { createHero3D } from '../game/hero3d';
 import { spellEffectsForFallback } from '../game/belindaSpell3d';
 import { getHeroVfx, heroVfxTint } from '../game/heroVfx';
-import { resolveArenaScene } from '../game/arena3d';
+import { arenaLighting, arenaPulseOpacity, resolveArenaScene, ARENA_CLIP_SECONDS } from '../game/arena3d';
+import { groundShadow } from '../game/spriteGroundShadow';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -88,6 +89,41 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     let lastUltimate: { atMs: number; tint?: number } | undefined;
     /** Sân 3D đang hiện + mốc trình diễn lúc nó vẽ được lần đầu, cho nhịp fade-in. */
     let arenaRevealId: string | undefined, arenaRevealAt = 0;
+    /** Sân đang đấu, để bóng nhân vật ngả theo đúng màu sàn của theme. */
+    const arenaScene = () => {
+      const theme = getCampaignStage(live.current.stageId).theme;
+      const arena = resolveSpriteArena(theme, live.current.arenaOverride);
+      return { theme, arena, definition: resolveArenaScene(theme, arena, live.current.arenaOverride) };
+    };
+    /** Màu sàn của theme đang đấu; mặc định xám đêm nếu stage không có sân. */
+    const arenaGroundHex = (): number => {
+      const { definition } = arenaScene();
+      return definition ? arenaLighting(definition.id).ground : 0x17141c;
+    };
+    /** 0..1 của nhịp pulse để bóng nhân vật nhạt đi cùng lúc cả sân bừng sáng. */
+    const currentPulseFlash = (): number => {
+      if (lastUltimate === undefined) return 0;
+      const since = (simulation.current?.getElapsedMs() ?? 0) + accumulator - lastUltimate.atMs;
+      if (!(since >= 0) || since >= ARENA_CLIP_SECONDS.pulse * 1000) return 0;
+      return arenaPulseOpacity(since / 1000 / ARENA_CLIP_SECONDS.pulse);
+    };
+    /**
+     * Gradient bóng dựng tại gốc toạ độ rồi dịch bằng context, nên chỉ tạo một lần cho mỗi
+     * (màu sàn, bán kính) thay vì cấp phát mới cho từng tướng ở mỗi khung.
+     */
+    const shadowGradients = new Map<string, CanvasGradient>();
+    const shadowFill = (shadow: ReturnType<typeof groundShadow>): CanvasGradient => {
+      const key = `${shadow.core}|${Math.round(shadow.radiusX)}`;
+      const cached = shadowGradients.get(key);
+      if (cached) return cached;
+      if (shadowGradients.size > 48) shadowGradients.clear();
+      const gradient = ctx.createRadialGradient(0, 0, 1, 0, 0, shadow.radiusX);
+      gradient.addColorStop(0, shadow.core);
+      gradient.addColorStop(.55, shadow.core);
+      gradient.addColorStop(1, shadow.edge);
+      shadowGradients.set(key, gradient);
+      return gradient;
+    };
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const reduceMotion = () => live.current.reducedMotion || motionPreference.matches;
     const observe = createBattlePresentationObserver();
@@ -176,8 +212,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       }
     };
     const drawFloor = () => {
-      const theme = getCampaignStage(live.current.stageId).theme;
-      const arena = resolveSpriteArena(theme, live.current.arenaOverride);
+      const { theme, arena, definition: scene } = arenaScene();
       const forest = arena === 'forest', dark = arena === 'shadow';
       canvas.dataset.arenaPalette = arena;
       const bg = ctx.createLinearGradient(0, 0, 0, height);
@@ -199,7 +234,6 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
         ctx.lineTo(width / 2 + Math.cos(angle) * width * 0.59, height * 0.57 + Math.sin(angle) * height * 0.27); ctx.stroke();
       }
       // Lớp sân Blender vẽ đè lên ellipse nền; asset tải xong mới hiện, lỗi thì giữ nền phẳng.
-      const scene = resolveArenaScene(theme, arena, live.current.arenaOverride);
       if (scene) {
         // Vòng sáng sân chỉ chạy trong 1,65 s kể từ lần tung tuyệt kỹ gần nhất.
         const sinceUltimate = lastUltimate === undefined ? undefined
@@ -234,7 +268,13 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const scale = getSpriteBattleScale(width, height);
       const hero = getHeroById(unit.heroId), spec = getOathboundSprite(hero.unitId);
       if (!overlayOnly) {
-      ctx.fillStyle = '#17141c66'; ctx.beginPath(); ctx.ellipse(point.x, point.y, 24 * scale, 7 * scale, 0, 0, Math.PI * 2); ctx.fill();
+      // Bóng tiếp đất mềm thay vì một ellipse đặc: ngả theo màu sàn, nhạt đi khi sân bừng sáng.
+      const shadow = groundShadow(arenaGroundHex(), scale, currentPulseFlash(), unit.isAlive);
+      ctx.save();
+      ctx.translate(point.x, point.y + shadow.offsetY);
+      ctx.fillStyle = shadowFill(shadow);
+      ctx.beginPath(); ctx.ellipse(0, 0, shadow.radiusX, shadow.radiusY, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
       if (unit.isAlive) {
         ctx.strokeStyle = unit.team === 'ally' ? '#f9d77e99' : '#ee837c99'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.ellipse(point.x, point.y, 28 * scale, 9 * scale, 0, 0, Math.PI * 2); ctx.stroke();
