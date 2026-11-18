@@ -269,6 +269,13 @@ export function createHeroVfxScene(THREE: Namespace, dependencies: HeroVfxDepend
           ctx.globalAlpha = .34;
           ctx.filter = 'blur(6px)';
           ctx.drawImage(renderer.domElement, -8, -8, frame.width + 16, frame.height + 16);
+          // Tuyệt kỹ thêm một lớp sương rộng hơn nữa: hình dạng GLB tan vào quầng thay vì chỉ
+          // được viền mềm. Chỉ bật khi trong batch thật sự có tuyệt kỹ, nên đòn thường giữ chi phí cũ.
+          if (samples.some(sample => sample.slot === 'ultimate')) {
+            ctx.filter = 'blur(14px)';
+            ctx.globalAlpha = .2;
+            ctx.drawImage(renderer.domElement, -22, -22, frame.width + 44, frame.height + 44);
+          }
           ctx.restore();
         }
       } finally {

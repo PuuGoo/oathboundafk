@@ -174,6 +174,31 @@ test('front casts get one additive blur halo and the canvas state is restored', 
   scene.dispose();
 });
 
+test('an ultimate adds a wider haze on top of the tight halo, still from one render', async () => {
+  const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
+  const ultimate = cast('ultimate', .3), basic = cast('basic', .3, 2);
+  scene.draw(screen.renderer, screen.ctx, [ultimate], 'front', frame);
+  await settle(scene);
+  const rendersBefore = screen.stats.renders;
+  screen.ops.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [ultimate], 'front', frame);
+  assert.equal(screen.ops.length, 3, 'ultimate composites itself plus a tight halo plus a wide haze');
+  assert.equal(screen.stats.renders - rendersBefore, 1, 'the extra haze must not cost a second render');
+  const blurs = screen.ops.slice(1).map(op => {
+    const radius = /blur\(([\d.]+)px\)/.exec(op.filter);
+    assert.ok(radius, `halo filter must be a blur (${op.filter})`);
+    return Number(radius[1]);
+  });
+  assert.ok(blurs[1] > blurs[0] * 1.5, `the haze must be wider than the halo (${blurs.join(' vs ')})`);
+  assert.ok(screen.ops[2].alpha < screen.ops[1].alpha, 'the wide haze stays subordinate to the tight halo');
+  assert.equal(screen.ops[2].composite, 'lighter', 'the haze adds light instead of veiling the stage');
+  // Đòn thường không kéo theo lớp rộng: chi phí cũ giữ nguyên.
+  screen.ops.length = 0;
+  scene.draw(screen.renderer, screen.ctx, [basic], 'front', frame);
+  assert.equal(screen.ops.length, 2, 'a basic cast keeps the single halo');
+  scene.dispose();
+});
+
 test('the LOW preset skips the halo pass to protect weak GPUs', async () => {
   const screen = surface(), scene = createHeroVfxScene(THREE, { loadModel: realAsset });
   const effect = cast('active', .5);
