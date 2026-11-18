@@ -27,6 +27,8 @@ import { castTelegraph } from '../game/spriteCastTelegraph';
 import { vignetteFor, vignetteStops } from '../game/spriteVignette';
 import { hitFlashFilter } from '../game/spriteHitFlash';
 import { dustPuff, MOVE_DUST_INTERVAL } from '../game/spriteMoveDust';
+import { readyAura } from '../game/spriteReadyAura';
+import { getUltimateReadiness } from '../game/ultimateReadiness';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -330,6 +332,29 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
             ctx.ellipse(point.x, point.y, telegraph.radius, telegraph.radius * .34,
               0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * telegraph.charge);
             ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+      // Hào quang "tuyệt kỹ sẵn sàng": chỉ đọc trạng thái thật của simulation.
+      if (unit.isAlive && !reduceMotion()) {
+        const readiness = getUltimateReadiness(unit, simulation.current?.getStatus() || 'running');
+        const aura = readyAura(visualClock, readiness.energy / 100, scale, readiness.canCast);
+        if (aura.visible) {
+          ctx.save();
+          ctx.strokeStyle = unit.team === 'ally' ? '#ffe6a8' : '#ffb0a8';
+          ctx.globalAlpha = aura.opacity;
+          ctx.lineWidth = aura.lineWidth;
+          ctx.beginPath();
+          ctx.ellipse(point.x, point.y, aura.radius, aura.radius * .34, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          for (const mote of aura.motes) {
+            ctx.fillStyle = unit.team === 'ally' ? `rgba(255,236,180,${mote.alpha.toFixed(3)})`
+              : `rgba(255,196,186,${mote.alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.ellipse(point.x + mote.x, point.y + mote.y * .34, mote.r, mote.r, 0, 0, Math.PI * 2);
+            ctx.fill();
           }
           ctx.restore();
         }
