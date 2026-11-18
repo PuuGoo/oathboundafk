@@ -2,7 +2,8 @@
 import type * as Three from 'three';
 import {
   arenaFogDepth, arenaLighting, arenaWeather, brazierGlow, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
-  sampleArenaPulse, arenaPulseOpacity, type ArenaDefinition, type ArenaSceneId, type ArenaWeather,
+  weatherVertexColours, sampleArenaPulse, arenaPulseOpacity,
+  type ArenaDefinition, type ArenaSceneId, type ArenaWeather,
 } from './arena3d';
 
 /**
@@ -254,8 +255,11 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    // Màu đỉnh: mỗi hạt sáng/tối khác nhau và mờ dần theo độ sâu, nên trường hạt có chiều sâu.
+    geometry.setAttribute('color', new THREE.BufferAttribute(weatherVertexColours(spec, spec.count), 4));
     const material = new THREE.PointsMaterial({ color: spec.color, size: spec.size, sizeAttenuation: false,
-      transparent: true, opacity: spec.opacity, depthWrite: false, blending: THREE.AdditiveBlending });
+      vertexColors: true, transparent: true, opacity: spec.opacity, depthWrite: false,
+      blending: THREE.AdditiveBlending });
     const points = new THREE.Points(geometry, material);
     points.name = 'Arena_weather'; points.frustumCulled = false;
     scene.add(points);

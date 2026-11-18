@@ -291,6 +291,15 @@ test('each arena draws one weather field that moves on the presentation clock', 
   const attribute = points[0].geometry.getAttribute('position') as THREE.BufferAttribute;
   assert.equal(attribute.count, spec.count, 'the particle budget comes from tools/arena-weather.json');
   assert.equal((points[0].material as THREE.PointsMaterial).color.getHex(), spec.color);
+  // Màu đỉnh: alpha theo độ sâu và độ sáng lệch nhau, nên trường hạt có chiều sâu thật.
+  const material0 = points[0].material as THREE.PointsMaterial;
+  assert.equal(material0.vertexColors, true, 'the weather must use per-grain colour');
+  const colours = points[0].geometry.getAttribute('color') as THREE.BufferAttribute;
+  assert.equal(colours.itemSize, 4, 'vertex colours carry an alpha channel');
+  assert.equal(colours.count, spec.count);
+  const depthAlphas: number[] = [];
+  for (let index = 0; index < colours.count; index++) depthAlphas.push(colours.getW(index));
+  assert.ok(Math.max(...depthAlphas) - Math.min(...depthAlphas) > .2, 'grains must span the depth band');
   const height = (): number => attribute.getY(0);
   const still = height();
   assert.ok(Math.abs(still - weatherParticle(spec, 0, 0).y) < 1e-3, 'the first frame places the authored field');

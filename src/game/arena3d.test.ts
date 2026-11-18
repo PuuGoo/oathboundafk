@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  arenaLighting, arenaWeather, brazierGlow, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
-  resolveArenaScene, sampleArenaPulse,
+  arenaLighting, arenaWeather, brazierGlow, weatherParticle, weatherParticleAlpha, weatherVertexColours,
+  WEATHER_FAR_ALPHA, WEATHER_NEAR_ALPHA, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, resolveArenaScene, sampleArenaPulse,
 } from './arena3d';
 import authoredArenas from '../../tools/arena-themes.json';
 import { getCampaignStage } from './campaign';
@@ -63,6 +63,38 @@ test('the brazier glow borrows the theme rim colour and stays a soft accent', ()
   }
   // Màu ngoài 24 bit bị cắt, không tràn sang kênh khác.
   assert.equal(brazierGlow(0xff00ff00).color, 0x00ff00);
+});
+
+test('weather particles fade with depth and vary per grain', () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const weather = arenaWeather(definition.id);
+    const colours = weatherVertexColours(weather, weather.count);
+    assert.equal(colours.length, weather.count * 4, `${definition.id}: one RGBA per grain`);
+    // Alpha theo độ sâu phải nằm trong khoảng đã đặt và đơn điệu.
+    assert.equal(weatherParticleAlpha(-110), WEATHER_FAR_ALPHA);
+    assert.equal(weatherParticleAlpha(40), WEATHER_NEAR_ALPHA);
+    assert.ok(weatherParticleAlpha(0) > weatherParticleAlpha(-80), 'nearer grains read stronger');
+    const alphas: number[] = [];
+    for (let index = 0; index < weather.count; index++) {
+      const alpha = colours[index * 4 + 3];
+      assert.ok(alpha >= WEATHER_FAR_ALPHA - 1e-6 && alpha <= WEATHER_NEAR_ALPHA + 1e-6,
+        `${definition.id}: grain ${index} alpha ${alpha} outside the depth band`);
+      alphas.push(alpha);
+      for (let channel = 0; channel < 3; channel++) {
+        assert.ok(colours[index * 4 + channel] >= 0 && colours[index * 4 + channel] <= 1,
+          `${definition.id}: grain ${index} channel ${channel} out of range`);
+      }
+    }
+    // Có hạt gần và hạt xa thật, không phải mọi hạt cùng độ sâu.
+    assert.ok(Math.max(...alphas) - Math.min(...alphas) > .2, `${definition.id}: grains must span the depth range`);
+    // Độ sáng khác nhau giữa các hạt, nhưng vẫn cùng họ màu.
+    const tints = new Set(Array.from({ length: weather.count }, (_, index) => colours[index * 4].toFixed(3)));
+    assert.ok(tints.size > weather.count * .5, `${definition.id}: grains must not share one flat brightness`);
+    // Số hạt âm/không hợp lệ không sinh mảng rác.
+    assert.equal(weatherVertexColours(weather, -4).length, 0);
+    assert.equal(weatherVertexColours(weather, NaN).length, 0);
+    assert.equal(weatherVertexColours(weather, 2.7).length, 8, 'counts are floored to whole grains');
+  }
 });
 
 test('every stage theme resolves a distinct authored arena', () => {

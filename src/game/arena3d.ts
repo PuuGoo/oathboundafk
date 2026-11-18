@@ -139,6 +139,43 @@ export function weatherParticle(weather: ArenaWeather, index: number,
   };
 }
 
+/** Hạt gần camera sáng hơn hạt phía sau, nên cả trường hạt có chiều sâu thay vì một mức mờ. */
+export const WEATHER_NEAR_ALPHA = 1, WEATHER_FAR_ALPHA = .28;
+
+/**
+ * Hệ số alpha theo độ sâu của hạt (`z` càng lớn càng gần camera).
+ * Nhân vào alpha đỉnh của mỗi hạt trong buffer `color`, nên material.opacity vẫn
+ * giữ nguyên vai trò điều khiển cả lớp (reveal, tuyệt kỹ, LOW preset).
+ */
+export function weatherParticleAlpha(z: number): number {
+  const span = WEATHER_Z_NEAR - WEATHER_Z_FAR;
+  const depth = Number.isFinite(z) ? Math.max(0, Math.min(1, (z - WEATHER_Z_FAR) / span)) : 0;
+  // Đường cong nhẹ: hạt xa vẫn còn thấy, không biến mất thành bụi mờ vô hình.
+  return WEATHER_FAR_ALPHA + (WEATHER_NEAR_ALPHA - WEATHER_FAR_ALPHA) * depth ** 1.35;
+}
+
+/**
+ * Màu đỉnh cho trường hạt: mỗi hạt một chút sáng/tối theo hash, và alpha theo độ sâu.
+ * Trả mảng phẳng RGBA (Float32) đúng thứ tự three cần cho `BufferAttribute(..., 4)`.
+ */
+export function weatherVertexColours(weather: ArenaWeather, count: number): Float32Array {
+  const total = Math.max(0, Math.floor(Number.isFinite(count) ? count : 0));
+  const colours = new Float32Array(total * 4);
+  const r = ((weather.color >> 16) & 0xff) / 255;
+  const g = ((weather.color >> 8) & 0xff) / 255;
+  const b = (weather.color & 0xff) / 255;
+  for (let index = 0; index < total; index++) {
+    // ±22 % độ sáng: đủ để hạt không đều nhau, chưa tới mức hai màu khác nhau.
+    const brightness = .78 + .44 * weatherHash(index, 4);
+    const z = WEATHER_Z_FAR + weatherHash(index, 2) * (WEATHER_Z_NEAR - WEATHER_Z_FAR);
+    colours[index * 4] = Math.min(1, r * brightness);
+    colours[index * 4 + 1] = Math.min(1, g * brightness);
+    colours[index * 4 + 2] = Math.min(1, b * brightness);
+    colours[index * 4 + 3] = weatherParticleAlpha(z);
+  }
+  return colours;
+}
+
 /** Nhịp sáng sân: lên nhanh, giữ ngắn, tan mềm trước khi clip kết thúc. */
 export function arenaPulseOpacity(progress: number): number {
   if (!Number.isFinite(progress) || progress <= 0 || progress >= 1) return 0;
