@@ -86,6 +86,8 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
     let impactShake = 0, visualClock = 0;
     /** Tuyệt kỹ gần nhất: mốc thời gian cho vòng pulse và màu của tướng đã tung. */
     let lastUltimate: { atMs: number; tint?: number } | undefined;
+    /** Sân 3D đang hiện + mốc trình diễn lúc nó vẽ được lần đầu, cho nhịp fade-in. */
+    let arenaRevealId: string | undefined, arenaRevealAt = 0;
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const reduceMotion = () => live.current.reducedMotion || motionPreference.matches;
     const observe = createBattlePresentationObserver();
@@ -204,9 +206,13 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
           : (simulation.current?.getElapsedMs() ?? 0) + accumulator - lastUltimate.atMs;
         const pulseAge = sinceUltimate !== undefined && sinceUltimate >= 0 && sinceUltimate < 1650
           ? sinceUltimate / 1000 : undefined;
+        const reveal = arenaRevealId === scene.id ? Math.max(0, visualClock - arenaRevealAt) : 0;
         const drawn = heroes3d.drawArena(ctx, scene, { width, height, centerX: width / 2, centerY: height * 0.57,
           radiusX: width * 0.66, radiusY: height * 0.31, reducedMotion: !!reduceMotion(),
-          pulseAge, pulseTint: pulseAge === undefined ? undefined : lastUltimate?.tint, wallClock: visualClock });
+          pulseAge, pulseTint: pulseAge === undefined ? undefined : lastUltimate?.tint,
+          reveal, wallClock: visualClock });
+        // Nhịp hiện dần chỉ bắt đầu từ khung vẽ được đầu tiên, không tính lúc asset còn đang tải.
+        if (drawn && arenaRevealId !== scene.id) { arenaRevealId = scene.id; arenaRevealAt = visualClock; }
         canvas.dataset.arena3d = JSON.stringify({ scene: scene.id, drawn,
           status: heroes3d.arenaStatus(scene.id), pulse: pulseAge !== undefined });
       } else {
@@ -280,6 +286,7 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       if (sim !== active) {
         heroes3d.reset();
         lastUltimate = undefined;
+        arenaRevealId = undefined; arenaRevealAt = 0;
         active = sim; actors.clear(); texts.length = 0; effects.length = 0; feed.length = 0; accumulator = 0; impactShake = 0; visualClock = 0; publishAnnouncements();
         sim?.getUnits().forEach(unit => actors.set(unit.instanceId, createSpriteActor(unit)));
       }

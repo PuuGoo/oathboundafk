@@ -21,6 +21,8 @@ export interface ArenaFrame {
   pulseAge?: number;
   /** Màu nhận diện của tướng vừa tung tuyệt kỹ; vòng sáng sàn lấy màu này. */
   pulseTint?: number;
+  /** Giây kể từ lúc sân 3D bắt đầu hiện trên khung; thiếu thì hiện ngay (1). */
+  reveal?: number;
   wallClock: number;
 }
 export interface LoadedArena { scene: Three.Object3D; animations: Three.AnimationClip[] }
@@ -43,12 +45,16 @@ type Active = {
   pulseObjects: Three.Object3D[];
   /** Vòng sáng pulse + màu gốc của nó, để tô màu chiêu rồi trả lại bảng màu theme. */
   pulseTintable: Array<{ material: Three.MeshStandardMaterial; color: Three.Color; emissive: Three.Color }>;
+  /** Mọi material của sân + độ mờ gốc, cho nhịp fade-in khi lớp 3D vừa hiện. */
+  revealMaterials: Array<{ material: Three.Material; base: number }>;
 };
 
 /** Mức pha với màu chiêu: đủ để đọc ra tướng nào vừa tung, chưa tới mức mất bảng màu sân. */
 const PULSE_TINT_MIX = .62;
 /** Ánh sáng gốc của sân và mức cộng thêm khi tuyệt kỹ đang chạy. */
 const SUN_INTENSITY = 1.5, RIM_INTENSITY = .7, PULSE_SUN_GAIN = 1.6, PULSE_RIM_GAIN = 1;
+/** Sân hiện dần trong bao lâu để asset vừa tải xong không bụp vào khung. */
+const REVEAL_SECONDS = .45;
 
 /**
  * Elevation chosen from the target ellipse instead of a fixed angle: the studio
@@ -177,6 +183,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
     const root = record.template.clone(true);
     root.visible = true;
     const pulseTintable: Active['pulseTintable'] = [];
+    const revealMaterials: Active['revealMaterials'] = [];
     // Alpha nhẹ để lớp sàn 3D hoà vào bầu trời Canvas2D phía sau thay vì cắt cứng.
     root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
@@ -194,6 +201,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         return copy;
       });
       object.material = Array.isArray(object.material) ? cloned : cloned[0];
+      for (const material of cloned) revealMaterials.push({ material, base: material.opacity });
       // Vòng pulse giữ màu gốc của theme để mỗi lần tung chiêu có thể tô lại rồi trả về.
       if (!object.name.startsWith('Pulse')) return;
       for (const material of cloned) {
@@ -216,7 +224,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       action.play();
       actions.set(name, action);
     }
-    active = { id, root, mixer, actions, pulseObjects, pulseTintable };
+    active = { id, root, mixer, actions, pulseObjects, pulseTintable, revealMaterials };
     return active;
   };
 
@@ -239,6 +247,11 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       if (renderer.getContext().isContextLost()) throw new Error('Arena context lost');
       pass++;
       const sample = sampleArenaPulse(frame.pulseAge, frame.wallClock, frame.reducedMotion);
+      // Sân hiện dần: asset vừa tải xong không được bụp vào khung giữa trận.
+      const reveal = frame.reveal === undefined || !Number.isFinite(frame.reveal) ? 1
+        : Math.max(0, Math.min(1, frame.reveal / REVEAL_SECONDS));
+      const revealEased = reveal * reveal * (3 - 2 * reveal);
+      for (const entry of current.revealMaterials) entry.material.opacity = entry.base * revealEased;
       for (const [name, action] of current.actions) {
         const wanted = name === sample.clip;
         action.enabled = wanted;
@@ -254,7 +267,9 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         object.visible = pulseVisible;
         if (object instanceof THREE.Mesh) {
           const materials = Array.isArray(object.material) ? object.material : [object.material];
-          for (const material of materials) material.opacity = pulseVisible ? arenaPulseOpacity(sample.progress) : 0;
+          for (const material of materials) {
+            material.opacity = pulseVisible ? arenaPulseOpacity(sample.progress) * revealEased : 0;
+          }
         }
       }
       // Vòng sáng dưới sàn mang màu của tướng vừa tung tuyệt kỹ, rồi trả lại bảng màu theme.

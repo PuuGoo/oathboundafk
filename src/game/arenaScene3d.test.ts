@@ -232,6 +232,33 @@ test('the pulse ring borrows the casting hero colour, then hands the palette bac
   } finally { scene.dispose(); }
 });
 
+test('the arena eases in when its 3D layer first appears instead of popping', async () => {
+  const definition = at('temple');
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  const floor: number[] = [];
+  screen.renderer.render = (root: THREE.Object3D) => {
+    root.traverse(object => {
+      if (!(object instanceof THREE.Mesh) || !object.name.includes('arena_floor')) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      floor.push(materials[0].opacity);
+    });
+  };
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reveal: 0 }));
+  await ready(scene, 'temple');
+  for (const reveal of [0, .1, .25, .45, 3]) {
+    scene.draw(screen.renderer, screen.ctx, definition, frame({ reveal }));
+  }
+  assert.equal(floor[0], 0, 'a freshly drawn arena starts invisible');
+  assert.ok(floor[1] > 0 && floor[1] < floor[2] && floor[2] < floor[3], 'it eases in, not in one step');
+  assert.ok(floor[3] > .99, 'the stage is solid by 0.45 s');
+  assert.equal(floor[4], 1, 'and clamps at full opacity afterwards');
+  // Khung cũ không truyền `reveal`: hiện ngay như trước.
+  scene.draw(screen.renderer, screen.ctx, definition, frame());
+  assert.equal(floor.at(-1), 1);
+  scene.dispose();
+});
+
 test('the whole arena flares with the ultimate, then settles back to its neutral rig', async () => {
   const definition = at('temple');
   const screen = surface();
