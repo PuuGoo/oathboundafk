@@ -23,6 +23,7 @@ import { getHeroVfx, heroVfxTint } from '../game/heroVfx';
 import { arenaLighting, arenaPulseOpacity, resolveArenaScene, ARENA_CLIP_SECONDS } from '../game/arena3d';
 import { groundShadow } from '../game/spriteGroundShadow';
 import { impactShock, IMPACT_SHOCK_SECONDS } from '../game/spriteImpactShock';
+import { castTelegraph } from '../game/spriteCastTelegraph';
 
 /** Shared live hero models with source-sprite fallback; only Belinda spells use the 3D pass. */
 export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUltimateConsumed?: (seq: number) => void }) {
@@ -278,6 +279,31 @@ export function SpriteBattleCanvas(props: ThreeBattleCanvasProps & { onManualUlt
       const scale = getSpriteBattleScale(width, height);
       const hero = getHeroById(unit.heroId), spec = getOathboundSprite(hero.unitId);
       if (!overlayOnly) {
+      // Vòng niệm dưới chân: đầy tới mốc phóng chiêu thật trong timeline, rồi tan nhanh.
+      const cast = unit.currentCast;
+      if (cast && unit.isAlive && !reduceMotion()) {
+        const ageSeconds = Math.max(0, (simulation.current?.getElapsedMs() ?? 0) + accumulator - cast.startedAtMs) / 1000;
+        const telegraph = castTelegraph(ageSeconds, cast.timeline.durationMs / 1000,
+          cast.timeline.releaseMs / 1000, scale,
+          cast.skillSlot === 'ultimate' ? 1.6 : cast.skillSlot === 'active' ? 1 : .5);
+        if (telegraph.alive) {
+          ctx.save();
+          ctx.globalAlpha = telegraph.opacity;
+          ctx.strokeStyle = unit.team === 'ally' ? '#ffe6a8' : '#ffb0a8';
+          ctx.lineWidth = telegraph.lineWidth;
+          ctx.beginPath();
+          ctx.ellipse(point.x, point.y, telegraph.radius, telegraph.radius * .34, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          // Cung đầy theo tiến độ niệm: đọc được còn bao lâu mới phóng chiêu.
+          if (!telegraph.released) {
+            ctx.beginPath();
+            ctx.ellipse(point.x, point.y, telegraph.radius, telegraph.radius * .34,
+              0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * telegraph.charge);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
       // Bóng tiếp đất mềm thay vì một ellipse đặc: ngả theo màu sàn, nhạt đi khi sân bừng sáng.
       const shadow = groundShadow(arenaGroundHex(), scale, currentPulseFlash(), unit.isAlive);
       ctx.save();
