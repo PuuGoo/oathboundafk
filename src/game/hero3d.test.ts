@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getHeroModel } from './heroModels';
 import { arenaLighting, ARENA_DEFINITIONS } from './arena3d';
+import type { ArenaFrame } from './arenaScene3d';
 
 const unit = (patch: Partial<BattleUnitRuntime> = {}) => ({
   instanceId: 'ally-rowan', heroId: 'rowan', isAlive: true, hp: 100,
@@ -100,7 +101,7 @@ function asset() {
 function surface() {
   const roots: THREE.Object3D[] = [], scales: number[] = [], sizes: number[][] = [];
   /** Màu đèn nhân vật theo thứ tự scene: hemisphere, key, rim. */
-  const lights: Array<Array<{ colour: string; ground: string }>> = [];
+  const lights: Array<Array<{ colour: string; ground: string; intensity: number }>> = [];
   let renders = 0, disposals = 0, losses = 0, lost = false;
   const renderer = {
     domElement: {}, setSize: (w: number, h: number) => sizes.push([w, h]), setPixelRatio() {}, setClearColor() {},
@@ -111,7 +112,8 @@ function surface() {
         || child instanceof THREE.DirectionalLight) as Array<THREE.HemisphereLight | THREE.DirectionalLight>;
       if (found.length) {
         lights.push(found.map(light => ({ colour: light.color.getHexString(),
-          ground: light instanceof THREE.HemisphereLight ? light.groundColor.getHexString() : '' })));
+          ground: light instanceof THREE.HemisphereLight ? light.groundColor.getHexString() : '',
+          intensity: light.intensity })));
       }
       const visible = scene.children.filter(child => child.visible && child instanceof THREE.Group);
       if (visible.length) { assert.equal(visible.length, 1); roots.push(visible[0]); }
@@ -211,6 +213,72 @@ test('the arena theme recolours the hero lights before its asset finishes loadin
   assert.equal(warm[1].colour, templeLighting.key.toString(16).padStart(6, '0'));
   assert.notDeepEqual(before, stormy);
   backend.dispose();
+});
+
+test('hero bodies catch the arena pulse flare, then settle back to the palette rig', async () => {
+  const screen = surface();
+  const realTemple = async () => {
+    const bytes = readFileSync(new URL('../../public/assets/arenas/temple.glb', import.meta.url));
+    const gltf = await new GLTFLoader().parseAsync(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+    return { scene: gltf.scene, animations: gltf.animations };
+  };
+  const backend = await loadHeroBackend({ renderer: screen.renderer,
+    loadModel: async () => asset(), loadArena: realTemple });
+  const temple = ARENA_DEFINITIONS.find(entry => entry.id === 'temple')!;
+  const frame = (patch: Partial<ArenaFrame> = {}): ArenaFrame => ({ width: 480, height: 680,
+    centerX: 240, centerY: 388, radiusX: 317, radiusY: 211, reducedMotion: false, wallClock: 0, ...patch });
+  // Lần vẽ đầu chỉ đăng ký model; lần sau mới thật sự render scene thân nhân vật.
+  const drawHero = async () => {
+    backend.draw(screen.ctx, unit(), actor(), 0, false, 0, 0, 1); await flush();
+    backend.draw(screen.ctx, unit(), actor(), 0, false, 0, 0, 1); await flush();
+  };
+  try {
+    assert.equal(backend.drawArena!(screen.ctx, temple, frame()), false, 'loading arena must not flash anything');
+    for (let attempt = 0; attempt < 300 && backend.arenaStatus!('temple') === 'loading'; attempt++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 5));
+    }
+    assert.equal(backend.arenaStatus!('temple'), 'ready');
+    assert.equal(backend.drawArena!(screen.ctx, temple, frame()), true);
+    await drawHero();
+    const idle = screen.lights.at(-1)!;
+    // Thứ tự scene: hemisphere, key, rim.
+    assert.equal(idle[0].intensity, 2.5);
+    assert.equal(idle[1].intensity, 3.5);
+    assert.equal(idle[2].intensity, 2);
+    assert.equal(idle[1].colour, arenaLighting('temple').key.toString(16).padStart(6, '0'));
+
+    // Tuyệt kỹ đang chạy: thân nhân vật bừng lên và ngả màu chiêu.
+    assert.equal(backend.drawArena!(screen.ctx, temple, frame({ pulseAge: .12, pulseTint: 0xff3322 })), true);
+    await drawHero();
+    const lit = screen.lights.at(-1)!;
+    assert.ok(lit[1].intensity > idle[1].intensity + 1, `hero key light must flare (${lit[1].intensity})`);
+    assert.ok(lit[2].intensity > idle[2].intensity, 'hero rim light follows the same pulse');
+    assert.notEqual(lit[1].colour, idle[1].colour, 'the flare carries the caster colour');
+
+    // Hết clip: rig trở lại đúng như trước khi tung.
+    assert.equal(backend.drawArena!(screen.ctx, temple, frame({ wallClock: 2.6 })), true);
+    await drawHero();
+    const settled = screen.lights.at(-1)!;
+    assert.deepEqual(settled, idle, 'hero lighting returns to the arena palette after the pulse');
+
+    // Reduced motion: không flash dù có pulseAge.
+    assert.equal(backend.drawArena!(screen.ctx, temple,
+      frame({ pulseAge: .12, pulseTint: 0xff3322, reducedMotion: true })), true);
+    await drawHero();
+    assert.deepEqual(screen.lights.at(-1), idle, 'reduced motion never flares the heroes');
+
+    // Reset giữa lúc flash không được để đèn sáng dính sang trận sau.
+    backend.drawArena!(screen.ctx, temple, frame({ pulseAge: .12, pulseTint: 0xff3322 }));
+    backend.reset();
+    assert.equal(backend.drawArena!(screen.ctx, temple, frame()), false, 'reset drops the arena cache');
+    for (let attempt = 0; attempt < 300 && backend.arenaStatus!('temple') === 'loading'; attempt++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 5));
+    }
+    assert.equal(backend.drawArena!(screen.ctx, temple, frame()), true);
+    await drawHero();
+    assert.deepEqual(screen.lights.at(-1), idle, 'reset clears the flare');
+  } finally { backend.dispose(); }
 });
 
 test('reset and unmount discard late models, cancel queued requests and never leak loaded resources', async () => {

@@ -9,7 +9,7 @@ import { createHeroVfxScene, type HeroVfxFrame, type LoadedVfx } from './heroVfx
 import { getHeroVfx, HERO_VFX_DEFINITIONS } from './heroVfx';
 import { createArenaScene, type ArenaFrame, type LoadedArena } from './arenaScene3d';
 import type { ArenaDefinition, ArenaSceneId } from './arena3d';
-import { arenaLighting } from './arena3d';
+import { arenaLighting, arenaPulseOpacity, ARENA_CLIP_SECONDS } from './arena3d';
 
 export type HeroClip = 'idle' | 'run' | 'basic' | 'active' | 'ultimate' | 'hit' | 'death';
 export type HeroModelStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -167,20 +167,49 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
   const camera = new THREE.OrthographicCamera(-1.8, 1.8, 2.1, -2.1, .1, 30);
   camera.position.set(-3, 2.1, 7); camera.lookAt(0, 1.35, 0); camera.updateMatrixWorld();
   const anchor = new THREE.Vector3();
-  const hemi = new THREE.HemisphereLight(0xfff4db, 0x62557a, 2.5);
+  /** Cường độ rig gốc của thân nhân vật; flash tuyệt kỹ cộng thêm rồi trả lại. */
+  const HEMI_INTENSITY = 2.5, KEY_INTENSITY = 3.5, RIM_INTENSITY = 2;
+  const PULSE_KEY_GAIN = 2.2, PULSE_RIM_GAIN = 1.4, PULSE_HEMI_GAIN = .5, PULSE_TINT_MIX = .55;
+  const hemi = new THREE.HemisphereLight(0xfff4db, 0x62557a, HEMI_INTENSITY);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffebcc, 3.5); key.position.set(-3, 6, 5); scene.add(key);
-  const rim = new THREE.DirectionalLight(0xc2e9ff, 2); rim.position.set(3, 4, -3); scene.add(rim);
+  const key = new THREE.DirectionalLight(0xffebcc, KEY_INTENSITY); key.position.set(-3, 6, 5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xc2e9ff, RIM_INTENSITY); rim.position.set(3, 4, -3); scene.add(rim);
   // Nhân vật lấy màu đèn từ sân đang đấu để hoà vào bảng màu thay vì bị chiếu trắng.
   let lightingId: ArenaSceneId | undefined;
+  /** 0..1 của nhịp pulse sân; 0 là rig trung tính. Màu chiêu chỉ áp khi flash > 0. */
+  let pulseFlash = 0;
+  let pulseTint: number | undefined;
+  const skyBase = new THREE.Color(0xfff4db), groundBase = new THREE.Color(0x62557a);
+  const keyBase = new THREE.Color(0xffebcc), rimBase = new THREE.Color(0xc2e9ff);
+  const flashTint = new THREE.Color();
+  const applyLighting = (): void => {
+    hemi.color.copy(skyBase); hemi.groundColor.copy(groundBase);
+    key.color.copy(keyBase); rim.color.copy(rimBase);
+    hemi.intensity = HEMI_INTENSITY + PULSE_HEMI_GAIN * pulseFlash;
+    key.intensity = KEY_INTENSITY + PULSE_KEY_GAIN * pulseFlash;
+    rim.intensity = RIM_INTENSITY + PULSE_RIM_GAIN * pulseFlash;
+    if (pulseFlash <= 0 || pulseTint === undefined) return;
+    flashTint.setHex(pulseTint >>> 0);
+    key.color.lerp(flashTint, PULSE_TINT_MIX * pulseFlash);
+    rim.color.lerp(flashTint, PULSE_TINT_MIX * pulseFlash * .7);
+  };
   const applyArenaLighting = (id: ArenaSceneId | undefined): void => {
     if (id === lightingId) return;
     lightingId = id;
     const lighting = id ? arenaLighting(id) : undefined;
-    hemi.color.setHex(lighting?.sky ?? 0xfff4db);
-    hemi.groundColor.setHex(lighting?.ground ?? 0x62557a);
-    key.color.setHex(lighting?.key ?? 0xffebcc);
-    rim.color.setHex(lighting?.rim ?? 0xc2e9ff);
+    skyBase.setHex(lighting?.sky ?? 0xfff4db);
+    groundBase.setHex(lighting?.ground ?? 0x62557a);
+    keyBase.setHex(lighting?.key ?? 0xffebcc);
+    rimBase.setHex(lighting?.rim ?? 0xc2e9ff);
+    applyLighting();
+  };
+  /** Dùng đúng bao hình pulse của sân để thân nhân vật bừng lên cùng lúc, không lệch nhịp. */
+  const applyPulseFlash = (frame: ArenaFrame): void => {
+    const next = frame.pulseAge !== undefined && Number.isFinite(frame.pulseAge) && !frame.reducedMotion
+      ? arenaPulseOpacity(Math.max(0, Math.min(1, frame.pulseAge / ARENA_CLIP_SECONDS.pulse))) : 0;
+    const tint = next > 0 ? frame.pulseTint : undefined;
+    if (next === pulseFlash && tint === pulseTint) return;
+    pulseFlash = next; pulseTint = tint; applyLighting();
   };
   const records = new Map<string, ModelRecord>(HERO_MODEL_DEFINITIONS.map(model => [model.heroId, {
     heroId: model.heroId, url: model.url, state: 'idle', loadGeneration: 0, inFlight: false,
@@ -265,7 +294,12 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       if (disposed) return false;
       // Đổi màu đèn nhân vật ngay khi biết sân, kể cả lúc asset sân còn đang tải.
       applyArenaLighting(definition.id);
-      try { return arena.draw(renderer, ctx, definition, frame); }
+      try {
+        const drawn = arena.draw(renderer, ctx, definition, frame);
+        // Chỉ bừng khi lớp sân 3D thật sự đang vẽ; nếu không thì chẳng có vòng sáng nào để khớp nhịp.
+        applyPulseFlash(drawn ? frame : { ...frame, pulseAge: undefined, pulseTint: undefined });
+        return drawn;
+      }
       catch { return false; }
     },
     beginFrame() { vfxHandled.clear(); },
@@ -348,6 +382,7 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       resetInstances();
       vfx.reset();
       arena.reset();
+      pulseFlash = 0; pulseTint = undefined; applyLighting();
       queue.splice(0).forEach(heroId => { const record = records.get(heroId); if (record && !record.inFlight) record.state = 'idle'; });
       for (const record of records.values()) {
         if (record.state === 'ready') { disposeTemplate(record); record.state = 'idle'; }
