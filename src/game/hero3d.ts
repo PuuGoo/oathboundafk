@@ -10,6 +10,7 @@ import { getHeroVfx, HERO_VFX_DEFINITIONS } from './heroVfx';
 import { createArenaScene, type ArenaFrame, type LoadedArena } from './arenaScene3d';
 import type { ArenaDefinition, ArenaSceneId } from './arena3d';
 import { arenaLighting, arenaPulseOpacity, ARENA_CLIP_SECONDS } from './arena3d';
+import { hitFlashFilter } from './spriteHitFlash';
 
 export type HeroClip = 'idle' | 'run' | 'basic' | 'active' | 'ultimate' | 'hit' | 'death';
 export type HeroModelStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -409,8 +410,9 @@ export async function loadHeroBackend(dependencies?: HeroBackendDependencies): P
       ctx.save();
       try {
         ctx.translate(x, y); ctx.scale(unit.facing < 0 ? -1 : 1, 1);
-        if (unit.statusEffects.some(status => status.type === 'petrify')) ctx.filter = 'grayscale(1)';
-        else if (actor.flash > 0) ctx.filter = 'brightness(1.65)';
+        // Nhịp loé đọc được phía trúng đòn: đồng minh ăn đòn địch loé đỏ, địch ăn đòn ta loé vàng.
+        ctx.filter = hitFlashFilter({ flash: actor.flash, team: unit.team,
+          petrified: unit.statusEffects.some(status => status.type === 'petrify') });
         ctx.drawImage(renderer.domElement, -footX * w, -footY * h, w, h);
       } finally { ctx.restore(); }
       return true;
