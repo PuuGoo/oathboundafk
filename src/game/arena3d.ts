@@ -2,6 +2,7 @@
 /** Arena themes that have a Blender-authored scene in `public/assets/arenas`. */
 import authoredArenas from '../../tools/arena-themes.json';
 import authoredFog from '../../tools/arena-fog.json';
+import authoredWeather from '../../tools/arena-weather.json';
 
 export type ArenaSceneId = 'temple' | 'forest' | 'shadow' | 'storm' | 'obsidian';
 
@@ -73,6 +74,54 @@ export interface ArenaFogDepth {
 export function arenaFogDepth(id: ArenaSceneId): ArenaFogDepth {
   const spec = authoredFog.find(entry => entry.id === id) ?? authoredFog[0];
   return Object.freeze({ near: spec.near, far: spec.far });
+}
+
+/** Thời tiết riêng của từng sân: bụi, bào tử, mưa hay tàn lửa trôi trong khung. */
+export interface ArenaWeather {
+  readonly count: number;
+  readonly color: number;
+  /** Kích thước điểm (pixel buffer; không giảm theo khoảng cách vì camera ortho). */
+  readonly size: number;
+  /** 1 là bốc lên, −1 là rơi xuống. */
+  readonly direction: 1 | -1;
+  /** Phần chiều cao đi được mỗi giây (0..1). */
+  readonly speed: number;
+  /** Biên độ đong đưa ngang. */
+  readonly drift: number;
+  readonly opacity: number;
+}
+
+const WEATHER_FLOOR = 2, WEATHER_SPAN = 100, WEATHER_HALF_WIDTH = 90;
+const WEATHER_Z_FAR = -110, WEATHER_Z_NEAR = 40;
+
+export function arenaWeather(id: ArenaSceneId): ArenaWeather {
+  const spec = authoredWeather.find(entry => entry.id === id) ?? authoredWeather[0];
+  return Object.freeze({
+    count: spec.count, color: hexToRgb(spec.color), size: spec.size,
+    direction: spec.direction < 0 ? -1 : 1, speed: spec.speed, drift: spec.drift, opacity: spec.opacity,
+  });
+}
+
+/** Hash ổn định theo chỉ số hạt, để mỗi sân có cùng một bố cục hạt ở mọi lần chạy. */
+function weatherHash(index: number, salt: number): number {
+  const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+/**
+ * Vị trí một hạt ở thời điểm `wallClock`. Hàm thuần: cùng đầu vào cho cùng đầu ra,
+ * nên test đo được chuyển động mà không cần giữ trạng thái hạt trong scene.
+ */
+export function weatherParticle(weather: ArenaWeather, index: number,
+  wallClock: number): { x: number; y: number; z: number } {
+  const clock = Number.isFinite(wallClock) ? Math.max(0, wallClock) : 0;
+  const cycle = (weatherHash(index, 3) + clock * weather.speed) % 1;
+  const rise = weather.direction > 0 ? cycle : 1 - cycle;
+  return {
+    x: (weatherHash(index, 1) - .5) * 2 * WEATHER_HALF_WIDTH + Math.sin(clock * .6 + index) * weather.drift,
+    y: WEATHER_FLOOR + rise * WEATHER_SPAN,
+    z: WEATHER_Z_FAR + weatherHash(index, 2) * (WEATHER_Z_NEAR - WEATHER_Z_FAR),
+  };
 }
 
 /** Nhịp sáng sân: lên nhanh, giữ ngắn, tan mềm trước khi clip kết thúc. */

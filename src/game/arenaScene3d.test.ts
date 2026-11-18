@@ -5,7 +5,9 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createArenaScene, type LoadedArena } from './arenaScene3d';
-import { arenaFogDepth, arenaLighting, ARENA_DEFINITIONS, ARENA_CLIP_SECONDS } from './arena3d';
+import {
+  arenaFogDepth, arenaLighting, arenaWeather, weatherParticle, ARENA_DEFINITIONS, ARENA_CLIP_SECONDS,
+} from './arena3d';
 
 const surface = () => {
   const stats = { renders: 0, draws: 0, lost: false };
@@ -230,6 +232,40 @@ test('the pulse ring borrows the casting hero colour, then hands the palette bac
     assert.equal(scene.draw(screen.renderer, screen.ctx, definition, frame({ pulseAge: .3 })), true);
     assert.ok(pulse[0].color.equals(base), 'a cast without a hero colour keeps the theme');
   } finally { scene.dispose(); }
+});
+
+test('each arena draws one weather field that moves on the presentation clock', async () => {
+  const definition = at('temple');
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  let points: THREE.Points[] = [];
+  screen.renderer.render = (root: THREE.Object3D) => {
+    points = [];
+    root.traverse(object => { if (object instanceof THREE.Points) points.push(object); });
+  };
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 0 }));
+  await ready(scene, 'temple');
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 0 }));
+  const spec = arenaWeather('temple');
+  assert.equal(points.length, 1, 'one Points object keeps the weather at one draw call');
+  const attribute = points[0].geometry.getAttribute('position') as THREE.BufferAttribute;
+  assert.equal(attribute.count, spec.count, 'the particle budget comes from tools/arena-weather.json');
+  assert.equal((points[0].material as THREE.PointsMaterial).color.getHex(), spec.color);
+  const height = (): number => attribute.getY(0);
+  const still = height();
+  assert.ok(Math.abs(still - weatherParticle(spec, 0, 0).y) < 1e-3, 'the first frame places the authored field');
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 2.4 }));
+  assert.notEqual(height(), still, 'particles move with the presentation clock');
+  // Reduced motion: đứng yên, giữ độ mờ tác giả (không phải reveal).
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 6, reducedMotion: true, reveal: 1 }));
+  const frozen = height();
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock: 9, reducedMotion: true, reveal: 1 }));
+  assert.equal(height(), frozen, 'reduced motion freezes the weather');
+  assert.equal((points[0].material as THREE.PointsMaterial).opacity, spec.opacity);
+  let released = 0;
+  points[0].geometry.addEventListener('dispose', () => released++);
+  scene.dispose();
+  assert.equal(released, 1, 'the weather geometry is released with the arena');
 });
 
 test('braziers, runes and motes breathe on a slow shimmer that reduced motion freezes', async () => {

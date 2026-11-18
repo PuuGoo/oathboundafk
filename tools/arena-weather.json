@@ -1,0 +1,7 @@
+[
+  {"id":"temple","count":64,"color":"ffe3a6","size":2.4,"direction":1,"speed":0.06,"drift":6,"opacity":0.5,"note":"Bụi vàng bay chậm dưới mái đền."},
+  {"id":"forest","count":72,"color":"c6f2a8","size":2.2,"direction":1,"speed":0.045,"drift":10,"opacity":0.42,"note":"Bào tử và lá nhỏ trôi trong tán rừng."},
+  {"id":"shadow","count":56,"color":"c8a8ff","size":2.0,"direction":1,"speed":0.03,"drift":4,"opacity":0.4,"note":"Bụi tím lơ lửng trong hầm mộ."},
+  {"id":"storm","count":96,"color":"bfe6ff","size":2.6,"direction":-1,"speed":0.55,"drift":2,"opacity":0.5,"note":"Mưa xiên rơi nhanh trên sống núi bão."},
+  {"id":"obsidian","count":60,"color":"ffb066","size":2.4,"direction":1,"speed":0.09,"drift":5,"opacity":0.55,"note":"Tàn lửa bốc lên từ bậc đá obsidian."}
+]

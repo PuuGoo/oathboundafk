@@ -1,8 +1,8 @@
 // PROTOTYPE - NOT FOR PRODUCTION
 import type * as Three from 'three';
 import {
-  arenaFogDepth, arenaLighting, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, sampleArenaPulse, arenaPulseOpacity,
-  type ArenaDefinition, type ArenaSceneId,
+  arenaFogDepth, arenaLighting, arenaWeather, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
+  sampleArenaPulse, arenaPulseOpacity, type ArenaDefinition, type ArenaSceneId, type ArenaWeather,
 } from './arena3d';
 
 /**
@@ -49,6 +49,8 @@ type Active = {
   revealMaterials: Array<{ material: Three.Material; base: number }>;
   /** Rune, đài lửa, hạt sáng + cường độ phát sáng gốc, cho nhịp thở chậm của sân. */
   shimmer: Array<{ material: Three.MeshStandardMaterial; base: number }>;
+  /** Thời tiết của sân: một `Points` duy nhất, vị trí tính lại theo đồng hồ trình diễn. */
+  weather: { points: Three.Points; geometry: Three.BufferGeometry; material: Three.PointsMaterial; spec: ArenaWeather };
 };
 
 /** Mức pha với màu chiêu: đủ để đọc ra tướng nào vừa tung, chưa tới mức mất bảng màu sân. */
@@ -168,6 +170,8 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
   const dropActive = (): void => {
     if (!active) return;
     active.mixer.stopAllAction(); active.mixer.uncacheRoot(active.root);
+    active.weather.geometry.dispose(); active.weather.material.dispose();
+    scene.remove(active.weather.points);
     active.root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
       const list = Array.isArray(object.material) ? object.material : [object.material];
@@ -235,7 +239,22 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       action.play();
       actions.set(name, action);
     }
-    active = { id, root, mixer, actions, pulseObjects, pulseTintable, revealMaterials, shimmer };
+    // Thời tiết của sân: một Points, mỗi hạt đặt bằng hàm thuần `weatherParticle`.
+    const spec = arenaWeather(id);
+    const positions = new Float32Array(spec.count * 3);
+    for (let index = 0; index < spec.count; index++) {
+      const particle = weatherParticle(spec, index, 0);
+      positions[index * 3] = particle.x; positions[index * 3 + 1] = particle.y; positions[index * 3 + 2] = particle.z;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({ color: spec.color, size: spec.size, sizeAttenuation: false,
+      transparent: true, opacity: spec.opacity, depthWrite: false, blending: THREE.AdditiveBlending });
+    const points = new THREE.Points(geometry, material);
+    points.name = 'Arena_weather'; points.frustumCulled = false;
+    scene.add(points);
+    active = { id, root, mixer, actions, pulseObjects, pulseTintable, revealMaterials, shimmer,
+      weather: { points, geometry, material, spec } };
     return active;
   };
 
@@ -269,6 +288,16 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         entry.material.emissiveIntensity = frame.reducedMotion ? entry.base
           : entry.base * (1 + SHIMMER_AMPLITUDE * Math.sin(wall * SHIMMER_SPEED + index * SHIMMER_PHASE_STEP));
       });
+      // Thời tiết: mưa/bụi/tàn lửa chạy theo đồng hồ trình diễn, đứng yên khi giảm chuyển động.
+      if (!frame.reducedMotion) {
+        const attribute = current.weather.geometry.getAttribute('position') as Three.BufferAttribute;
+        for (let index = 0; index < current.weather.spec.count; index++) {
+          const particle = weatherParticle(current.weather.spec, index, wall);
+          attribute.setXYZ(index, particle.x, particle.y, particle.z);
+        }
+        attribute.needsUpdate = true;
+      }
+      current.weather.material.opacity = current.weather.spec.opacity * revealEased;
       for (const [name, action] of current.actions) {
         const wanted = name === sample.clip;
         action.enabled = wanted;

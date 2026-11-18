@@ -6,6 +6,7 @@ Lớp thứ ba sau model nhân vật và hiệu ứng kỹ năng: sân đấu đ
 ## Đường ống
 
 - `tools/arena-themes.json`: một scene cho mỗi theme của campaign — `temple` (sanctuary), `forest` (sylvan), `shadow` (catacombs), `storm` (tempest), `obsidian` (obsidian). Gồm bảng màu sàn/viền/đạo cụ/phát sáng và `glow`.
+- `tools/arena-weather.json`: thời tiết riêng của từng sân (số hạt, màu, kích thước điểm, hướng bốc/rơi, tốc độ, biên độ đong đưa, độ mờ) — cùng cách với `arena-fog.json`, runtime đọc trực tiếp.
 - `tools/build-arena.py`: dựng sàn nhiều lớp, vành đá, cột + chậu lửa ở nửa xa, cờ, tường thành xa + hai tháp canh, hạt trôi, vòng pulse; gộp mọi mesh tĩnh cùng material rồi xuất GLB.
 
 **Quy ước trục.** Mọi toạ độ trong `build-arena.py` viết theo hệ tác giả Y-up (`-Z` là hướng camera), rồi đổi sang hệ Blender Z-up qua `to_blender()`. Blender xuất với `export_yup=True` nên `(x, y, z)` thành `(x, z, -y)`; nếu đưa thẳng toạ độ tác giả vào Blender thì đài lửa và cột sẽ nằm ngang dưới sàn. Kích thước dùng `to_blender_extent()` (độ lớn, không đổi dấu).
@@ -60,12 +61,13 @@ Sàn Canvas2D là ellipse `width*0.66 × height*0.31`, tỷ lệ **0,665**. Came
 - Buffer dùng chung không còn cố định 384×448: `heroes3d.resize(cssWidth, cssHeight, dpr)` (gọi trong `resize()` của canvas) đặt chiều rộng buffer bằng `cssWidth × dpr`, kẹp trong 384–1024, và luôn giữ tỷ lệ 448/384 để khung cắt thân nhân vật không méo. Trước đây sân 3D ở cửa sổ 960 px bị phóng từ 384 px nên nhoè; nay buffer đi theo canvas (LOW preset giữ 1× cho máy yếu). Cùng một `renderer.setSize`, không thêm target hay pass; đo lại bằng `renderer.setSize` trong test, chưa đo FPS/GPU.
 - Sân hiện dần trong 0,45 s: `ArenaFrame.reveal` là số giây kể từ khung vẽ được **đầu tiên** (component chỉ bắt đầu đếm khi `drawArena` trả `true`, nên thời gian asset đang tải không bị tính), eased smoothstep và nhân vào độ mờ gốc của mọi material; vòng pulse nhân thêm hệ số đó. Thiếu `reveal` thì hiện ngay như trước. Không thêm lượt vẽ, chỉ ghi `opacity` trước `renderer.render`.
 - Rune, đài lửa và hạt sáng (`arena_glow`/`arena_ember`) thở chậm: `emissiveIntensity` giao động ±12 % quanh cường độ tác giả theo `wallClock × 2,2`, mỗi material lệch pha 1,7 rad nên không thành một nhịp đều. Reduced motion trả về đúng cường độ tác giả và đứng yên. Chỉ ghi số trên material, không thêm đèn hay pass.
+- Thời tiết sân: mỗi sân thêm **một** `THREE.Points` (56–96 hạt, additive, không ghi depth, `sizeAttenuation:false`) làm bụi vàng, bào tử, bụi tím, mưa rơi (`direction -1`) hay tàn lửa bốc. Vị trí hạt tính bằng hàm thuần `weatherParticle(weather, index, wallClock)` từ hash cố định nên bố cục giống nhau mọi lần chạy; mỗi khung chỉ ghi lại buffer vị trí, một draw call. Reduced motion đóng băng hạt, `reveal` nhân vào độ mờ, `dispose()` giải phóng geometry/material của lớp thời tiết.
 
 ## Bằng chứng
 
 - `verify-arena-models`: 5/5 GLB qua, 130 pose lấy mẫu, 3.855.876 byte tổng.
 - Trong trận thật (Chrome production preview, save giả): stage 1 `temple`, stage 3 `shadow`, stage 4/5 `forest`, stage 6/7 `storm`, stage 9 `obsidian` — mỗi theme đều `drawn:true`, pause giữ pixel, ×2 vẫn vẽ, 0 exception. Lỗi 404 duy nhất là `/favicon.ico`.
 - Lượt chạy lại trên bản dựng mới nhất (buffer theo canvas + flash sân + vệt đạn): stage 1 với `--verify-fog` đọc đúng `fogNear 400 / fogFar 640 / fogColor [0.553, 0.447, 0.314]` từ lệnh WebGL đang vẽ; stage 9 `obsidian` cũng `drawn:true`, pause ổn định, ×2 vẫn vẽ, 0 exception.
-- 326/326 test, `tsc --noEmit` sạch, `vite build` đạt.
+- 331/331 test, `tsc --noEmit` sạch, `vite build` đạt.
 
 Giới hạn: chưa có duyệt mỹ thuật bằng mắt (công cụ xem ảnh trả 403 ở phiên này); chưa đo FPS/GPU, nên chưa biết buffer 1024 px ảnh hưởng bao nhiêu tới máy yếu; chưa kiểm mọi stage của campaign, chỉ một stage đại diện cho mỗi theme.

@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  arenaLighting, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS, resolveArenaScene, sampleArenaPulse,
+  arenaLighting, arenaWeather, weatherParticle, ARENA_CLIP_SECONDS, ARENA_DEFINITIONS,
+  resolveArenaScene, sampleArenaPulse,
 } from './arena3d';
 import authoredArenas from '../../tools/arena-themes.json';
 import { getCampaignStage } from './campaign';
@@ -23,6 +24,32 @@ test('battle replacement clears the previous arena ultimate timestamp', () => {
     return lastUltimate;
   `);
   assert.equal(reset(), undefined, 'old cast must not replay when the new clock reaches 8000 ms');
+});
+
+test('every arena carries its own weather field that moves and stays inside the stage', () => {
+  for (const definition of ARENA_DEFINITIONS) {
+    const weather = arenaWeather(definition.id);
+    assert.ok(Number.isInteger(weather.count) && weather.count > 20, `${definition.id}: weather needs particles`);
+    assert.ok(weather.size > 0 && weather.size < 6, `${definition.id}: points stay small`);
+    assert.ok(weather.opacity > 0 && weather.opacity <= .7, `${definition.id}: weather stays subordinate`);
+    assert.ok(weather.speed > 0 && weather.speed < 1, `${definition.id}: weather needs a sane speed`);
+    assert.ok(weather.color >= 0 && weather.color <= 0xffffff, `${definition.id}: weather needs a colour`);
+    assert.notDeepEqual(weatherParticle(weather, 0, 0), weatherParticle(weather, 0, 1.5),
+      `${definition.id}: particles must move`);
+    for (const clock of [0, .7, 3.3, 12]) {
+      for (let index = 0; index < weather.count; index += 7) {
+        const particle = weatherParticle(weather, index, clock);
+        assert.ok(Math.abs(particle.x) < 110 && particle.y > 1 && particle.y < 103
+          && particle.z > -115 && particle.z < 45,
+        `${definition.id}: particle ${index} left the stage at ${clock}s`);
+      }
+    }
+    // Bố cục hạt là hàm thuần: cùng đầu vào cho cùng đầu ra, không phụ thuộc thứ tự gọi.
+    assert.deepEqual(weatherParticle(weather, 3, .4), weatherParticle(weather, 3, .4));
+    assert.notDeepEqual(weatherParticle(weather, 3, .4), weatherParticle(weather, 4, .4));
+  }
+  assert.equal(arenaWeather('storm').direction, -1, 'rain falls');
+  assert.equal(arenaWeather('obsidian').direction, 1, 'embers rise');
 });
 
 test('every stage theme resolves a distinct authored arena', () => {
