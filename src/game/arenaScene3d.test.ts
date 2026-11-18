@@ -232,6 +232,47 @@ test('the pulse ring borrows the casting hero colour, then hands the palette bac
   } finally { scene.dispose(); }
 });
 
+test('braziers, runes and motes breathe on a slow shimmer that reduced motion freezes', async () => {
+  const definition = at('temple');
+  const screen = surface();
+  const scene = createArenaScene(THREE, { loadModel: realArena('temple') });
+  let glow: THREE.MeshStandardMaterial[] = [];
+  screen.renderer.render = (root: THREE.Object3D) => {
+    glow = [];
+    root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        if (material instanceof THREE.MeshStandardMaterial && /arena_(glow|ember)/.test(material.name)) glow.push(material);
+      }
+    });
+  };
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reducedMotion: true }));
+  await ready(scene, 'temple');
+  // Reduced motion đọc ra đúng cường độ tác giả — dùng làm mốc so sánh.
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reducedMotion: true, wallClock: 9 }));
+  const base = glow.map(material => material.emissiveIntensity);
+  assert.ok(glow.length > 2, 'the arena must actually carry glowing materials');
+  assert.ok(base.every(value => value > 0), 'authored emission must survive the theme factor');
+
+  const factors: number[][] = [];
+  for (const wallClock of [.3, .9, 1.6]) {
+    scene.draw(screen.renderer, screen.ctx, definition, frame({ wallClock }));
+    factors.push(glow.map((material, index) => material.emissiveIntensity / base[index]));
+  }
+  for (const list of factors) {
+    for (const factor of list) assert.ok(factor > .87 && factor < 1.13, `shimmer ${factor} must stay subtle`);
+  }
+  assert.ok(factors[0].some((factor, index) => Math.abs(factor - factors[1][index]) > 1e-3), 'the shimmer must move');
+  const spread = Math.max(...factors[1]) - Math.min(...factors[1]);
+  assert.ok(spread > .01, 'materials must breathe out of phase, not as one flat pulse');
+
+  // Reduced motion: về đúng tác giả và đứng yên.
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reducedMotion: true, wallClock: .4 }));
+  scene.draw(screen.renderer, screen.ctx, definition, frame({ reducedMotion: true, wallClock: 3.1 }));
+  glow.forEach((material, index) => assert.equal(material.emissiveIntensity, base[index]));
+  scene.dispose();
+});
+
 test('the arena eases in when its 3D layer first appears instead of popping', async () => {
   const definition = at('temple');
   const screen = surface();

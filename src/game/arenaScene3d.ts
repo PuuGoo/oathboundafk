@@ -47,6 +47,8 @@ type Active = {
   pulseTintable: Array<{ material: Three.MeshStandardMaterial; color: Three.Color; emissive: Three.Color }>;
   /** Mọi material của sân + độ mờ gốc, cho nhịp fade-in khi lớp 3D vừa hiện. */
   revealMaterials: Array<{ material: Three.Material; base: number }>;
+  /** Rune, đài lửa, hạt sáng + cường độ phát sáng gốc, cho nhịp thở chậm của sân. */
+  shimmer: Array<{ material: Three.MeshStandardMaterial; base: number }>;
 };
 
 /** Mức pha với màu chiêu: đủ để đọc ra tướng nào vừa tung, chưa tới mức mất bảng màu sân. */
@@ -55,6 +57,8 @@ const PULSE_TINT_MIX = .62;
 const SUN_INTENSITY = 1.5, RIM_INTENSITY = .7, PULSE_SUN_GAIN = 1.6, PULSE_RIM_GAIN = 1;
 /** Sân hiện dần trong bao lâu để asset vừa tải xong không bụp vào khung. */
 const REVEAL_SECONDS = .45;
+/** Biên độ và tốc độ nhịp thở của các material phát sáng (`arena_glow`/`arena_ember`). */
+const SHIMMER_AMPLITUDE = .12, SHIMMER_SPEED = 2.2, SHIMMER_PHASE_STEP = 1.7;
 
 /**
  * Elevation chosen from the target ellipse instead of a fixed angle: the studio
@@ -184,6 +188,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
     root.visible = true;
     const pulseTintable: Active['pulseTintable'] = [];
     const revealMaterials: Active['revealMaterials'] = [];
+    const shimmer: Active['shimmer'] = [];
     // Alpha nhẹ để lớp sàn 3D hoà vào bầu trời Canvas2D phía sau thay vì cắt cứng.
     root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
@@ -202,6 +207,12 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       });
       object.material = Array.isArray(object.material) ? cloned : cloned[0];
       for (const material of cloned) revealMaterials.push({ material, base: material.opacity });
+      // Lửa và rune thở chậm; cường độ gốc lấy sau hệ số .8 của theme.
+      for (const material of cloned) {
+        if (material instanceof THREE.MeshStandardMaterial && /arena_(glow|ember)/.test(material.name)) {
+          shimmer.push({ material, base: material.emissiveIntensity });
+        }
+      }
       // Vòng pulse giữ màu gốc của theme để mỗi lần tung chiêu có thể tô lại rồi trả về.
       if (!object.name.startsWith('Pulse')) return;
       for (const material of cloned) {
@@ -224,7 +235,7 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
       action.play();
       actions.set(name, action);
     }
-    active = { id, root, mixer, actions, pulseObjects, pulseTintable, revealMaterials };
+    active = { id, root, mixer, actions, pulseObjects, pulseTintable, revealMaterials, shimmer };
     return active;
   };
 
@@ -252,6 +263,12 @@ export function createArenaScene(THREE: Namespace, dependencies: ArenaDependenci
         : Math.max(0, Math.min(1, frame.reveal / REVEAL_SECONDS));
       const revealEased = reveal * reveal * (3 - 2 * reveal);
       for (const entry of current.revealMaterials) entry.material.opacity = entry.base * revealEased;
+      // Nhịp thở chậm của lửa/rune; reduced motion giữ đúng cường độ tác giả.
+      const wall = Number.isFinite(frame.wallClock) ? frame.wallClock : 0;
+      current.shimmer.forEach((entry, index) => {
+        entry.material.emissiveIntensity = frame.reducedMotion ? entry.base
+          : entry.base * (1 + SHIMMER_AMPLITUDE * Math.sin(wall * SHIMMER_SPEED + index * SHIMMER_PHASE_STEP));
+      });
       for (const [name, action] of current.actions) {
         const wanted = name === sample.clip;
         action.enabled = wanted;
